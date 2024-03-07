@@ -1,0 +1,12 @@
+{
+    "title": "Boruta Feature Selection",
+    "authors": [
+        {
+            "name": "Matteo Manzi",
+            "link": "https://github.com/matteoettam09"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "boruta_feature_selection.ipynb"
+}

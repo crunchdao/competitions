@@ -1,0 +1,12 @@
+{
+    "title": "QuickStarter Notebook",
+    "authors": [
+        {
+            "name": "Matteo Manzi",
+            "link": "https://github.com/matteoettam09"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "quickstarter_notebook.ipynb"
+}

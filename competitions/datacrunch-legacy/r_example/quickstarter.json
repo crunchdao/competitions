@@ -1,0 +1,21 @@
+{
+    "title": "R Example",
+    "authors": [
+        {
+            "name": "RWarnung",
+            "link": "https://github.com/rwarnung"
+        },
+        {
+            "name": "Matteo Manzi",
+            "link": "https://github.com/matteoettam09"
+        },
+        {
+            "name": "Xavier de Vautibault",
+            "link": "https://github.com/xaviergilbert"
+        }
+    ],
+    "language": "R",
+    "notebook": true,
+    "deprecated": true,
+    "entrypoint": "r_example.ipynb"
+}

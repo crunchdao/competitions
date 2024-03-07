@@ -1,0 +1,12 @@
+{
+    "title": "sklego Group Timeseries Split",
+    "authors": [
+        {
+            "name": "Matteo Manzi",
+            "link": "https://github.com/matteoettam09"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "sklego_group_timeseries_split.ipynb"
+}

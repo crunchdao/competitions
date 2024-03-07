@@ -1,0 +1,16 @@
+{
+    "title": "Basic Submission",
+    "authors": [
+        {
+            "name": "Jean Herelle",
+            "link": "https://github.com/jeheran"
+        },
+        {
+            "name": "Matteo Manzi",
+            "link": "https://github.com/matteoettam09"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "basic_submission.ipynb"
+}

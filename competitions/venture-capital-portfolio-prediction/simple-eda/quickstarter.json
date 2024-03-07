@@ -1,0 +1,12 @@
+{
+    "title": "Simple EDA",
+    "authors": [
+        {
+            "name": "Zoe Mavroeidi",
+            "link": "https://github.com/zoe-mav"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "simple-eda.ipynb"
+}

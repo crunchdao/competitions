@@ -1,0 +1,12 @@
+{
+    "title": "Advanced Modelling Analysis",
+    "authors": [
+        {
+            "name": "Matteo Manzi",
+            "link": "https://github.com/matteoettam09"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "advanced_modelling_analysis.ipynb"
+}

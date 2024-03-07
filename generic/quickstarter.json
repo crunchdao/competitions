@@ -1,0 +1,17 @@
+{
+    "title": "Generic",
+    "authors": [
+        {
+            "name": "Enzo Caceres",
+            "link": "https://github.com/Caceresenzo"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": false,
+    "entrypoint": "main.py",
+    "files": [
+        ".gitignore",
+        "main.py",
+        "requirements.txt"
+    ]
+}

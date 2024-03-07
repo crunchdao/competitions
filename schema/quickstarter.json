@@ -1,0 +1,88 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "A quickstarter schema",
+    "type": "object",
+    "properties": {
+        "title": {
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "authors": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "link": {
+                        "type": "string"
+                    },
+                    "additionalProperties": false
+                },
+                "required": [
+                    "name"
+                ]
+            }
+        },
+        "language": {
+            "type": "string",
+            "enum": [
+                "PYTHON",
+                "R"
+            ]
+        },
+        "deprecated": {
+            "type": "boolean",
+            "default": false
+        },
+        "notebook": {
+            "type": "boolean"
+        },
+        "entrypoint": {
+            "type": "string"
+        },
+        "files": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        }
+    },
+    "additionalProperties": false,
+    "required": [
+        "title",
+        "authors",
+        "language",
+        "notebook",
+        "entrypoint"
+    ],
+    "oneOf": [
+        {
+            "$comment": "if `notebook`, do not require `files`",
+            "properties": {
+                "notebook": {
+                    "const": true
+                }
+            },
+            "not": {
+                "required": [
+                    "files"
+                ]
+            }
+        },
+        {
+            "$comment": "if not `notebook`, do require `files`",
+            "properties": {
+                "notebook": {
+                    "const": false
+                }
+            },
+            "required": [
+                "files"
+            ]
+        }
+    ]
+}
