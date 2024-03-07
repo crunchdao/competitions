@@ -16,10 +16,28 @@ def _validate(
     try:
         jsonschema.validate(instance=quickstarter_json, schema=schema)
 
-        print(f"{path}: valid")
+        entrypoint = quickstarter_json["entrypoint"]
+        if quickstarter_json["notebook"]:
+            files = [entrypoint]
+        else:
+            files = quickstarter_json["files"]
+        
+        if entrypoint not in files:
+            raise ValueError("entrypoint not in files list")
+        
+        parent = os.path.dirname(path)
+        missing = []
+        for file in files:
+            file_path = os.path.join(parent, file)
+            if not os.path.exists(file_path):
+                missing.append(file_path)
+        
+        if len(missing):
+            raise ValueError("some files are missing:\n" + "\n".join(missing))
 
+        print(f"{path}: valid")
         return True
-    except jsonschema.exceptions.ValidationError as error:
+    except Exception as error:
         print(f"{path}: invalid")
         print()
         for line in str(error).splitlines():
@@ -27,7 +45,6 @@ def _validate(
         print()
 
         return False
-
 
 @click.group()
 def cli():
