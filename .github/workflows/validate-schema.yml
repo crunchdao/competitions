@@ -22,9 +22,10 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install -r requirements.txt
-    - name: Validate Competitions
+    - name: Validate
       run: |
-        python validate.py competitions
-    - name: Validate Generic
-      run: |
-        python validate.py generic
+        python validate.py \
+          --contact-api ${{ github.ref_name == 'master' }}
+      env:
+        API_BASE_URL: ${{ secrets.CRUNCHDAO_API_KEY }}
+        CRUNCHDAO_API_KEY: ${{ secrets.CRUNCHDAO_API_KEY }}
