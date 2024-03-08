@@ -27,5 +27,5 @@ jobs:
         python validate.py \
           --contact-api ${{ github.ref_name == 'master' }}
       env:
-        API_BASE_URL: ${{ secrets.CRUNCHDAO_API_KEY }}
+        API_BASE_URL: ${{ vars.API_BASE_URL }}
         CRUNCHDAO_API_KEY: ${{ secrets.CRUNCHDAO_API_KEY }}
