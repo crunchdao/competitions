@@ -95,14 +95,24 @@ def generic(
     schema_path: str,
     root: str
 ):
+    success = True
+
     with open(schema_path) as fd:
         schema = json.load(fd)
 
-    quickstarter_json_path = os.path.join(root, quickstarter_json_name)
-    if not os.path.exists(quickstarter_json_path):
-        return
+    for quickstarter_name in os.listdir(root):
+        quickstarter_root = os.path.join(root, quickstarter_name)
+        if not os.path.isdir(quickstarter_root):
+            continue
 
-    if not _validate(schema, quickstarter_json_path):
+        quickstarter_json_path = os.path.join(quickstarter_root, quickstarter_json_name)
+        if not os.path.exists(quickstarter_json_path):
+            continue
+
+        if not _validate(schema, quickstarter_json_path):
+            success = False
+
+    if not success:
         exit(1)
 
 
