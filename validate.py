@@ -60,7 +60,7 @@ def _validate_directories(
     schema: dict,
     root: str,
     items: typing.List[typing.Dict],
-    competition_name: typing.Optional[str] = None
+    extra_properties: typing.Dict[str, typing.Any]
 ):
     success = True
 
@@ -79,7 +79,7 @@ def _validate_directories(
         else:
             items.append(quickstarter_json)
             quickstarter_json["name"] = quickstarter_root_name
-            quickstarter_json["competitionName"] = competition_name
+            quickstarter_json.update(extra_properties)
 
     return success
 
@@ -90,6 +90,7 @@ def _validate_directories(
 @click.option("--api-base-url", envvar="API_BASE_URL", default="https://api.hub.crunchdao.com")
 @click.option("--contact-api", default=False)
 @click.option("--api-key", envvar="CRUNCHDAO_API_KEY", default=None)
+@click.option("--debug", is_flag=True)
 def cli(
     competition_root: str,
     generic_root: str,
@@ -97,6 +98,8 @@ def cli(
     api_base_url: str,
     contact_api: str,
     api_key: str,
+    # ---
+    debug: bool,
 ):
     success = True
     items = []
@@ -109,14 +112,30 @@ def cli(
         if not os.path.isdir(competition_name_root):
             continue
 
-        if not _validate_directories(schema, competition_name_root, items, competition_name):
+        props = {
+            "competitionName": competition_name
+        }
+
+        if not _validate_directories(schema, competition_name_root, items, props):
             success = False
 
-    if not _validate_directories(schema, generic_root, items):
-        success = False
+    for competition_format in ["TIMESERIES", "DAG"]:
+        competition_format_root = os.path.join(generic_root, competition_format.lower())
+        if not os.path.isdir(competition_format_root):
+            continue
+
+        props = {
+            "competitionFormat": competition_format
+        }
+
+        if not _validate_directories(schema, competition_format_root, items, props):
+            success = False
 
     if not success:
         exit(1)
+
+    if debug:
+        print(json.dumps(items, indent=4))
 
     if contact_api:
         url = urllib.parse.urljoin(api_base_url, "/v1/quickstarters/~")
