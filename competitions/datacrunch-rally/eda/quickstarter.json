@@ -1,0 +1,16 @@
+{
+    "title": "EDA",
+    "authors": [
+        {
+            "name": "Matteo Manzi",
+            "link": "https://github.com/matteoettam09"
+        },
+        {
+            "name": "Xavier de Vautibault",
+            "link": "https://github.com/xaviergilbert"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "eda.ipynb"
+}
