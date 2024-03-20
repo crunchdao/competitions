@@ -1,0 +1,13 @@
+{
+    "title": "Baseline",
+    "authors": [
+        {
+            "name": "Todo",
+            "link": "https://github.com/xxx"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "deprecated": true,
+    "entrypoint": "baseline.ipynb"
+}
