@@ -101,6 +101,7 @@ def cli(
     # ---
     debug: bool,
 ):
+    print(api_key)
     success = True
     items = []
 
