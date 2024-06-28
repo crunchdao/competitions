@@ -1,0 +1,16 @@
+{
+    "title": "Quickstarter",
+    "authors": [
+        {
+            "name": "Jean Herelle",
+            "link": "https://github.com/jeheran"
+        },
+        {
+            "name": "Xavier Gilbert",
+            "link": "https://github.com/xaviergilbert"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "quickstarter.ipynb"
+}
