@@ -32,6 +32,7 @@ def train(
     # moon_column_name: str,
     target_column_names: crunch.Columns,
     prediction_column_names: crunch.Columns,
+    # feature_column_names: crunch.Columns,
     # moon: int,
     # current_moon: int, # same as "moon"
     # embargo: int,
@@ -79,6 +80,7 @@ def infer(
     moon_column_name: str,
     target_column_names: crunch.Columns,
     prediction_column_names: crunch.Columns,
+    # feature_column_names: crunch.Columns,
     # moon: int,
     # current_moon: int, # same as "moon"
     # embargo: int,
