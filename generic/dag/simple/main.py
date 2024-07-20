@@ -20,9 +20,7 @@ def train(
     model_directory_path: str,
     # id_column_name: str,
     # prediction_column_name: str,
-    # embargo: int,
     # has_gpu: bool,
-    # has_trained: bool,
 ) -> None:
     """
     Do your model training here.
@@ -37,9 +35,7 @@ def train(
         model_directory_path: the path to save your updated model
         id_column_name: the name of the id column
         prediction_column_name: the name of the prediction column
-        embargo: data embrago
         has_gpu: if the runner has a gpu
-        has_trained: if the moon will train
 
     Returns:
         None
@@ -61,9 +57,7 @@ def infer(
     model_directory_path: str,
     id_column_name: str,
     prediction_column_name: str,
-    # embargo: int,
     # has_gpu: bool,
-    # has_trained: bool,
 ) -> pd.DataFrame:
     """
     Do your inference here.
@@ -79,7 +73,6 @@ def infer(
         id_column_name: the name of the id column
         prediction_column_name: the name of the prediction column
         has_gpu: if the runner has a gpu
-        has_trained: if the moon will train
 
     Returns:
         A dataframe (id, value) with the inferences of your model for the current date.
