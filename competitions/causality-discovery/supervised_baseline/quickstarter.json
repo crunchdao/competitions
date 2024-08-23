@@ -1,5 +1,5 @@
 {
-    "title": "Supervised Baseline Submission",
+    "title": "Supervised Baseline",
     "authors": [
         {
             "name": "ADIA Lab"
@@ -8,5 +8,5 @@
     "language": "PYTHON",
     "notebook": true,
     "deprecated": true,
-    "entrypoint": "supervised_baseline_submission.ipynb"
+    "entrypoint": "supervised_baseline.ipynb"
 }
