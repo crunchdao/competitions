@@ -1,0 +1,11 @@
+{
+    "title": "Neural Network",
+    "authors": [
+        {
+            "name": "ADIA Lab"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "neural_network.ipynb"
+}
