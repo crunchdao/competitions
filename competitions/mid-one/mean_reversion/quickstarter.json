@@ -1,0 +1,16 @@
+{
+    "title": "Mean Reversion",
+    "authors": [
+        {
+            "name": "Peter COTTON",
+            "link": "https://github.com/microprediction"
+        },
+        {
+            "name": "Enzo CACERES",
+            "link": "https://github.com/Caceresenzo"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "mean_reversion.ipynb"
+}
