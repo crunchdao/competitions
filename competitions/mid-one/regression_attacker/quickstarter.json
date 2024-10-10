@@ -1,0 +1,12 @@
+{
+    "title": "Regression Attacker",
+    "authors": [
+        {
+            "name": "Peter COTTON",
+            "link": "https://github.com/microprediction"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "regression_attacker.ipynb"
+}

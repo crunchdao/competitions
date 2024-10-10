@@ -1,0 +1,12 @@
+{
+    "title": "Momentum Attacker",
+    "authors": [
+        {
+            "name": "Peter COTTON",
+            "link": "https://github.com/microprediction"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "momentum_attacker.ipynb"
+}
