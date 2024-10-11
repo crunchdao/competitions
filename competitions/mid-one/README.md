@@ -15,7 +15,7 @@ $$
 \begin{aligned}
 \text{If} \quad E[x_{t+30} | x_t, x_{t-1}, \dots] &> x_t + \epsilon \quad &\text{then return} \quad 1 \\
 \text{If} \quad E[x_{t+30} | x_t, x_{t-1}, \dots] &< x_t - \epsilon \quad &\text{then return} \quad -1 \\
-\text{Otherwise} \quad &\text{return} \quad 0
+\text{Otherwise} \quad  & &\text{return} \quad 0
 \end{aligned}
 $$
 
