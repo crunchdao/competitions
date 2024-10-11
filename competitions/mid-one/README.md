@@ -8,12 +8,15 @@ Your goal is to try to discern where a sequence of points will go 30 steps in th
 
 ![Time Series](https://github.com/microprediction/endersnotebooks/blob/main/assets/images/timeseries.png?raw=true)
 
-
-Instead of forecasting every time step focuses on detecting deviations from the expected martingale property of the time series, which is when we expect no systematic changes:
+However, unlike a typical forecasting task, you don't need to make a prediction for every data point. Instead, you should try to discern the occasions when you are confident in the direction only. To be precise, your
+task is to determine, for each time point, which of the following is true:
 
 \[
 E[x_{t+1} | x_t, x_{t-1}, \dots] = x_t
 \]
+
+
+
 
 In this model, the "attacker" only trades when it believes the series is deviating from its expected behavior, signaling an opportunity for action.
 
