@@ -19,13 +19,13 @@ $$
 \end{aligned}
 $$
 
-In the language of trading:
+In the language of trading. If you expect the price $30$ periods from now to be ...
 
 | Condition | Action |
 | --- | --- |
-| If you expect the price 30 periods from now to be **higher** than the current price by more than $\epsilon$ | **Buy and hold for 30 periods** (Return 1) |
-| If you expect the price 30 periods from now to be **lower** than the current price by more than $\epsilon$ | **Sell and hold for 30 periods** (Return -1) |
-| If you don't expect any significant movement (less than $\epsilon$) | **Abstain** (Return 0) |
+| **Higher** than the current price by more than $\epsilon$ | **Buy and hold for 30 periods** (Return 1) |
+| **Lower** than the current price by more than $\epsilon$ | **Sell and hold for 30 periods** (Return -1) |
+| Neither| **Abstain** (Return 0) |
 
 
 
