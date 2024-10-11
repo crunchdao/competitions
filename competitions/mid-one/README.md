@@ -43,14 +43,8 @@ We have provided a class that you are welcome, but not obligated, to use called 
 
 | Notebook | Description |
 | --- | --- |
-| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | This notebook demonstrates a mean reversion strategy that predicts whether a time series will go up or down. |
-| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | Implements an attacker strategy using a deviation from martingale behavior to make buy, sell, or hold decisions. |
-| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | Shows how to process univariate time series data streams to detect trading opportunities. |
-| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | Includes the basic setup, data loading, and submission process for CrunchDAO competitions. |
+| [Mean Reversion](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | A minimalist notebook illustrating the requirements. Includes the basic setup, data loading, and submission process for CrunchDAO competitions. |
+| [Mean Reversion Attacker](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion_attacker.ipynb) | An example providing a pattern using and `Attacker` class |
+| [Momentum Attacker](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/momentum_attacker.ipynb) | A similar example that also demonstrates more incremental calculations and the use of utilities `FEWMean` and `FEWVar` that you might find handy. |
+| [Regression Attacker](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/regression_attacker.ipynb) |  |
 
-
-## Setup
-
-To set up and use this notebook, follow these steps:
-
-1. **Install dependencies:**
