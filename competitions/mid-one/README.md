@@ -8,7 +8,7 @@ Your goal is to try to discern whether, in 30 data points time, a sequence of nu
 
 ![Time Series](https://github.com/microprediction/endersnotebooks/blob/main/assets/images/timeseries.png?raw=true)
 
-However, unlike a typical forecasting task, you don't need to make a prediction for every data point. Instead, you should try to discern the occasions when you are confident in the direction only. To be precise, your
+However, unlike a typical forecasting task, you don't need to make a prediction for every data point. Instead, you should try to discern only the occasions when you are confident in the direction only. To be precise, your
 task is to determine, for each time point, which of three conditions is true. 
 
 $$
