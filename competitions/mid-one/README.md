@@ -2,22 +2,14 @@
 
 Example notebooks are provided to help you get going with a new style of crunch at [Mid+One](  ) where you are invited to make directional predictions of time-series. 
 
-| Notebook | Description |
-| --- | --- |
-| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | This notebook demonstrates a mean reversion strategy that predicts whether a time series will go up or down. |
-| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | Implements an attacker strategy using a deviation from martingale behavior to make buy, sell, or hold decisions. |
-| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | Shows how to process univariate time series data streams to detect trading opportunities. |
-| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | Includes the basic setup, data loading, and submission process for CrunchDAO competitions. |
-| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_re
+## Goal 
+
+Your goal is to try to discern where a sequence of points will go 30 steps in the future. 
+
+![Time Series](https://github.com/microprediction/endersnotebooks/blob/main/assets/images/timeseries.png?raw=true)
 
 
-
-
-
-
-## Overview
-
-This notebook implements a **Mean Reversion** strategy that aims to predict whether a time series will go up or down, but only when it has a strong opinion. Instead of forecasting precise values, it focuses on detecting deviations from the expected martingale property of the time series, which is when we expect no systematic changes:
+Instead of forecasting every time step focuses on detecting deviations from the expected martingale property of the time series, which is when we expect no systematic changes:
 
 \[
 E[x_{t+1} | x_t, x_{t-1}, \dots] = x_t
@@ -35,6 +27,19 @@ The model signals when it believes there is a deviation from the martingale prop
 - **0**: Signal to **hold** if no significant deviation is detected.
 
 The model also considers a **trading cost**, implying that most predictions will be 0 (no action), as trading opportunities are expected to be rare.
+
+
+
+
+| Notebook | Description |
+| --- | --- |
+| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | This notebook demonstrates a mean reversion strategy that predicts whether a time series will go up or down. |
+| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | Implements an attacker strategy using a deviation from martingale behavior to make buy, sell, or hold decisions. |
+| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | Shows how to process univariate time series data streams to detect trading opportunities. |
+| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | Includes the basic setup, data loading, and submission process for CrunchDAO competitions. |
+| [Notebook](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_re
+
+
 
 ## Setup
 
