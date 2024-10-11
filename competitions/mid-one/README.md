@@ -44,7 +44,7 @@ We have provided a class that you are welcome, but not obligated, to use called 
 | Notebook | Description |
 | --- | --- |
 | [Mean Reversion](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) | A minimalist notebook illustrating the requirements. Includes the basic setup, data loading, and submission process for CrunchDAO competitions. |
-| [Mean Reversion Attacker](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion_attacker.ipynb) | An example providing a pattern using and `Attacker` class |
-| [Momentum Attacker](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/momentum_attacker.ipynb) | A similar example that also demonstrates more incremental calculations and the use of utilities `FEWMean` and `FEWVar` that you might find handy. |
-| [Regression Attacker](https://github.com/microprediction/quickstarters/blob/master/competitions/mid-one/mean_reversion/regression_attacker.ipynb) |  |
+| [Mean Reversion Attacker](https://github.com/crunchdao/quickstarters/blob/master/competitions/mid-one/mean_reversion_attacker/mean_reversion_attacker.ipynb) | An example providing a pattern using and `Attacker` class |
+| [Momentum Attacker](https://github.com/crunchdao/quickstarters/blob/master/competitions/mid-one/momentum_attacker/momentum_attacker.ipynb) | A similar example that also demonstrates more incremental calculations and the use of utilities `FEWMean` and `FEWVar` that you might find handy. |
+| [Regression Attacker](https://github.com/crunchdao/quickstarters/blob/master/competitions/mid-one/regression_attacker/regression_attacker.ipynb) | An easily generalizable example where the decision is based on the result of an incrementally learned regression.   |
 
