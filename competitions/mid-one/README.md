@@ -4,7 +4,7 @@ Example notebooks are provided to help you get going with a new style of crunch 
 
 ## Goal 
 
-Your goal is to try to discern where a sequence of points will go 30 steps in the future. 
+Your goal is to try to discern whether, in 30 data points time, a sequence of numbers will be higher or lower than where it currently is. 
 
 ![Time Series](https://github.com/microprediction/endersnotebooks/blob/main/assets/images/timeseries.png?raw=true)
 
