@@ -9,11 +9,17 @@ Your goal is to try to discern where a sequence of points will go 30 steps in th
 ![Time Series](https://github.com/microprediction/endersnotebooks/blob/main/assets/images/timeseries.png?raw=true)
 
 However, unlike a typical forecasting task, you don't need to make a prediction for every data point. Instead, you should try to discern the occasions when you are confident in the direction only. To be precise, your
-task is to determine, for each time point, which of the following is true:
+task is to determine, for each time point, which of three conditions is true. 
 
-\[
-E[x_{t+1} | x_t, x_{t-1}, \dots] = x_t
-\]
+$$
+\begin{aligned}
+\text{If} \quad E[x_{t+30} | x_t, x_{t-1}, \dots] &> x_t + \epsilon \quad &\text{then return} \quad 1 \\
+\text{If} \quad E[x_{t+30} | x_t, x_{t-1}, \dots] &< x_t - \epsilon \quad &\text{then return} \quad -1 \\
+\text{Otherwise} \quad &\text{return} \quad 0
+\end{aligned}
+$$
+
+
 
 
 
