@@ -2,14 +2,14 @@
 
 Example notebooks are provided to help you get going with a new style of crunch at [Mid+One](  ) where you are invited to make directional predictions of time-series. 
 
-## Goal 
+## Goal: Detecting small deviations from the martingale property 
 
 Your goal is to try to discern whether, in 30 data points time, a sequence of numbers will be higher or lower than where it currently is. 
 
 ![Time Series](https://github.com/microprediction/endersnotebooks/blob/main/assets/images/timeseries.png?raw=true)
 
 However, unlike a typical forecasting task, you don't need to make a prediction for every data point. Instead, you should try to discern only the occasions when you are confident in the direction only. To be precise, your
-task is to determine, for each time point, which of three conditions is true. 
+task is to determine, for each time point, which of three conditions is true. In the language of mathematics:
 
 $$
 \begin{aligned}
@@ -18,6 +18,14 @@ $$
 \text{Otherwise} \quad  & &\text{return} \quad 0
 \end{aligned}
 $$
+
+In the language of trading:
+
+| Condition | Action |
+| --- | --- |
+| If you expect the price 30 periods from now to be **higher** than the current price by more than the threshold \( \epsilon \) | **Buy** (Return 1) |
+| If you expect the price 30 periods from now to be **lower** than the current price by more than the threshold \( \epsilon \) | **Sell** (Return -1) |
+| If you don't expect any significant movement (less than \( \epsilon \)) | **Hold** (Return 0) |
 
 
 
