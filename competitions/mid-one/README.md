@@ -27,23 +27,18 @@ In the language of trading. If you expect the price $30$ periods from now to be 
 | **Lower** than the current price by more than $\epsilon$ | **Sell and hold for 30 periods** (Return -1) |
 | Neither| **Abstain** (Return 0) |
 
+See the [notebook](https://github.com/crunchdao/quickstarters/blob/master/competitions/mid-one/mean_reversion/mean_reversion.ipynb) for a slightly different phrasing of the task. 
 
+## The infer function 
 
+Your notebook needs to have an `infer` function that can yield one `prediction` at a time, though as noted above a prediction is really a "decision".  
 
+![Infer](https://github.com/microprediction/endersnotebooks/blob/main/assets/images/infer.png?raw=true)
 
+You can adopt the same style as this example. Of note, the `yield` function appears twice. The first yield signals to the system that you are ready (put any time consuming initialization before that). The second yield will return the decisions. 
 
-In this model, the "attacker" only trades when it believes the series is deviating from its expected behavior, signaling an opportunity for action.
+** The `Attacker` class **
 
-## Key Concept: Difference from a Forecast
-- A **forecast** tries to predict the next value in the sequence.
-- In **mean reversion**, the model is interested in detecting when the series has deviated from its mean and is expected to revert back, signaling potential trading actions (buy, sell, hold).
-
-The model signals when it believes there is a deviation from the martingale property and returns:
-- **1**: Signal to **buy** if the value is below the mean.
-- **-1**: Signal to **sell** if the value is above the mean.
-- **0**: Signal to **hold** if no significant deviation is detected.
-
-The model also considers a **trading cost**, implying that most predictions will be 0 (no action), as trading opportunities are expected to be rare.
 
 
 
