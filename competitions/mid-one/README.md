@@ -37,11 +37,9 @@ Your notebook needs to have an `infer` function that can yield one `prediction` 
 
 You can adopt the same style as this example. Of note, the `yield` function appears twice. The first yield signals to the system that you are ready (put any time consuming initialization before that). The second yield will return the decisions. 
 
-** The `Attacker` class **
+## The `Attacker` class
 
-
-asdf
-
+We have provided a class that you are welcome, but not obligated, to use called `Attacker`. The first example does not use this but subsquent ones do. The attacker takes care of some conveniences for you, notably computation of running profit and loss. 
 
 | Notebook | Description |
 | --- | --- |
