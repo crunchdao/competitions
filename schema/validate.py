@@ -63,6 +63,7 @@ def _validate_directories(
     extra_properties: typing.Dict[str, typing.Any]
 ):
     success = True
+    root = os.path.join(root, "quickstarters")
 
     for quickstarter_root_name in os.listdir(root):
         quickstarter_root = os.path.join(root, quickstarter_root_name)
