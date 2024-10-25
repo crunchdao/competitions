@@ -9,5 +9,5 @@
     ],
     "language": "PYTHON",
     "notebook": true,
-    "entrypoint": "quickstarter-cnn.ipynb"
+    "entrypoint": "first-draft.ipynb"
 }
