@@ -1,6 +1,6 @@
 # quant-venture-capital-resources
 
-![xalpha](https://github.com/crunchdao/quant-venture-capital-resources/assets/39467268/7f63aafe-55c5-4092-9224-c4c9d4be6ac3)
+![xalpha](cover.jpeg)
 
 
 This bounty marks the beginning of the "Rally" series, comprising multiple iterations aimed at refining our Data-Generating Process. Each Rally features a short submission phase (up to one month) to enhance this process. The steps involved in each Rally are as follows: the release of a new dataset version, model submission, out-of-sample scoring, result analysis, and the subsequent release of the next dataset version. This iterative process will continue until the desired level of accuracy is achieved.
