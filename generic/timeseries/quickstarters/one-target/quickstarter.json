@@ -1,0 +1,18 @@
+{
+    "title": "Simple 1-Target",
+    "description": "A very simple, competition-agnostic, quickstarter code that does not include any model.",
+    "authors": [
+        {
+            "name": "Enzo Caceres",
+            "link": "https://github.com/Caceresenzo"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": false,
+    "entrypoint": "main.py",
+    "files": [
+        ".gitignore",
+        "main.py",
+        "requirements.txt"
+    ]
+}
