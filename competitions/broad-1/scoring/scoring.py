@@ -45,12 +45,15 @@ def check(
         zar_data = os.path.join(data_directory_path, "test", f"{target}.zarr")
         zip_data = f"{zar_data}.zip"
 
-        # Check if .zarr data exists; if not, ensure zip file exists and extract it
+        # Only extract if .zarr data does not exist
+        print(zar_data, "exists?", os.path.exists(zar_data))
         if not os.path.exists(zar_data):
-            if not os.path.exists(zip_data):
-                raise FileNotFoundError(f"{zip_data} does not exist and is required for check.")
-            with zipfile.ZipFile(zip_data, "r") as zip_ref:
-                zip_ref.extractall(data_directory_path)
+            print(zip_data, "exists?", os.path.exists(zip_data))
+            if os.path.exists(zip_data):
+                with zipfile.ZipFile(zip_data, "r") as zip_ref:
+                    zip_ref.extractall(os.path.dirname(zip_data))
+            else:
+                raise FileNotFoundError(f"{zip_data} does not exist and is required for scoring.")
 
         # Read the Zarr data
         sdata = spatialdata.read_zarr(zar_data)
@@ -107,13 +110,16 @@ def score(
         zip_data = f"{zar_data}.zip"
 
         # Only extract if .zarr data does not exist
+        print(zar_data, "exists?", os.path.exists(zar_data))
         if not os.path.exists(zar_data):
+            print(zip_data, "exists?", os.path.exists(zip_data))
             if os.path.exists(zip_data):
                 with zipfile.ZipFile(zip_data, "r") as zip_ref:
-                    zip_ref.extractall(data_directory_path)
+                    zip_ref.extractall(os.path.dirname(zip_data))
             else:
                 raise FileNotFoundError(f"{zip_data} does not exist and is required for scoring.")
 
+        print(zar_data)
         sdata = spatialdata.read_zarr(zar_data)
 
         group_type = 'test' if phase_type == crunch.api.PhaseType.SUBMISSION else 'validation'
