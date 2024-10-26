@@ -17,26 +17,26 @@ class ParticipantVisibleError(Exception):
 
 
 def check(
-    df_predictions: pd.DataFrame,
+    prediction: pd.DataFrame,
     data_directory_path: str,
     target_names: list[str],
-    phase_type: 'crunch.api.PhaseType'  # Assuming PhaseType is imported from crunch.api
+    phase_type: crunch.api.PhaseType
 ):
     # Check for required columns
     required_columns = ['cell_id', 'gene', 'prediction', 'sample']
-    missing_columns = [col for col in required_columns if col not in df_predictions.columns]
+    missing_columns = [col for col in required_columns if col not in prediction.columns]
     if missing_columns:
         raise ParticipantVisibleError(f"Missing required columns: {', '.join(missing_columns)}")
 
     # Check for missing samples
-    unique_samples = df_predictions['sample'].unique()
+    unique_samples = prediction['sample'].unique()
     missing_samples = [sample for sample in target_names if sample not in unique_samples]
     if missing_samples:
         raise ParticipantVisibleError(f"Missing required samples: {', '.join(missing_samples)}")
 
     # Filter predictions by samples once to avoid filtering in the loop
     predictions_by_sample = {
-        sample: df_predictions[df_predictions['sample'] == sample]
+        sample: prediction[prediction['sample'] == sample]
         for sample in target_names
     }
 
@@ -53,7 +53,7 @@ def check(
                 zip_ref.extractall(data_directory_path)
 
         # Read the Zarr data
-        sdata = sd.read_zarr(zar_data)
+        sdata = spatialdata.read_zarr(zar_data)
 
         # Get predictions for the current sample
         predictions = predictions_by_sample[target]
@@ -99,7 +99,7 @@ def score(
     target_names: list[str],
     phase_type: crunch.api.PhaseType,
 ):
-    df_predictions = prediction
+    prediction = prediction
 
     scores = {}
     for target in target_names:
@@ -133,28 +133,31 @@ def score(
             index=cell_ids.values.flatten()
         )
 
-        predictions = df_predictions[df_predictions['sample'] == "UC1_NI"][['cell_id', 'gene', 'prediction']]
-        predictions = predictions.pivot(index='cell_id', columns='gene', values='prediction')
+        group = prediction[prediction['sample'] == "UC1_NI"][['cell_id', 'gene', 'prediction']]
+        group = group.pivot(index='cell_id', columns='gene', values='prediction')
 
-        scores[target] = _mean_squared_error(predictions, expected)
+        scores[target] = _mean_squared_error(group, expected)
 
     return scores
 
 
-def _mean_squared_error(predictions: pandas.DataFrame, expectations: pandas.DataFrame):
+def _mean_squared_error(
+    prediction: pandas.DataFrame,
+    y_test: pandas.DataFrame
+):
     # Ensure the same index and column order
-    predictions = predictions.reindex(index=expectations.index, columns=expectations.columns)
+    prediction = prediction.reindex(index=y_test.index, columns=y_test.columns)
 
     # Extract cell and gene counts directly
-    cell_count = len(expectations.index)
-    gene_count = len(expectations.columns)
+    cell_count = len(y_test.index)
+    gene_count = len(y_test.columns)
 
     # Calculate weights for cells
     weight_on_cells = numpy.full(cell_count, 1 / cell_count)
 
-    # Convert expectations and predictions to NumPy arrays
-    A = expectations.to_numpy()
-    B = predictions.to_numpy()
+    # Convert y_test and predictions to NumPy arrays
+    A = y_test.to_numpy()
+    B = prediction.to_numpy()
 
     # Ensure shape alignment
     assert A.shape == B.shape, "Prediction and Expected gene expression do not match"
