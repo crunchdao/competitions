@@ -2,7 +2,6 @@ import contextlib
 import datetime
 import os
 import typing
-import zipfile
 
 import crunch
 import numpy
@@ -183,16 +182,6 @@ def _read_zarr(
     target_name: str
 ):
     zar_data = os.path.join(data_directory_path, "test", f"{target_name}.zarr")
-    zip_data = f"{zar_data}.zip"
-
-    with log(f"Only extract if .zarr data does not exist -> {os.path.exists(zar_data)}"):
-        if not os.path.exists(zar_data):
-            print(zip_data, "exists?", os.path.exists(zip_data))
-            if os.path.exists(zip_data):
-                with zipfile.ZipFile(zip_data, "r") as zip_ref:
-                    zip_ref.extractall(os.path.dirname(zip_data))
-            else:
-                raise FileNotFoundError(f"{zip_data} does not exist and is required for scoring.")
 
     with log("Read the Zarr data"):
         sdata = spatialdata.read_zarr(zar_data)
