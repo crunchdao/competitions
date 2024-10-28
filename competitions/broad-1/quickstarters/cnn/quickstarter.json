@@ -1,0 +1,12 @@
+{
+    "title": "QuickStarter CNN",
+    "authors": [
+        {
+            "name": "Jean Herelle",
+            "link": "https://github.com/jeheran"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "cnn.ipynb"
+}

@@ -1,0 +1,13 @@
+{
+    "title": "QuickStarter First Draft",
+    "description": "NOT FINAL",
+    "authors": [
+        {
+            "name": "Jean Herelle",
+            "link": "https://github.com/jeheran"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "first-draft.ipynb"
+}
