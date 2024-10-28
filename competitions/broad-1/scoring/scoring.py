@@ -77,13 +77,13 @@ def check(
             missing = set(prediction['gene']) - gene_names
 
             if missing:
-                raise ParticipantVisibleError(f"The following genes are missing in predictions: {', '.join(missing[-10:])}.")
+                raise ParticipantVisibleError(f"The following genes are missing in predictions: {', '.join(list(missing)[-10:])}.")
 
         with log("Check that all cell IDs are present in predictions"):
             missing = set(prediction['cell_id']) - cell_ids
 
             if missing:
-                raise ParticipantVisibleError(f"The following cell IDs are missing in predictions: {', '.join(missing[-10:])}.")
+                raise ParticipantVisibleError(f"The following cell IDs are missing in predictions: {', '.join(list(missing)[-10:])}.")
 
         with log("Check data types in the 'prediction' column"):
             if not pandas.api.types.is_numeric_dtype(prediction['prediction']):
