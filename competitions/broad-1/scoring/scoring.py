@@ -181,7 +181,7 @@ def _read_zarr(
     data_directory_path: str,
     target_name: str
 ):
-    zar_data = os.path.join(data_directory_path, "test", f"{target_name}.zarr")
+    zar_data = os.path.join(data_directory_path, f"{target_name}.zarr")
 
     with log("Read the Zarr data"):
         sdata = spatialdata.read_zarr(zar_data)
