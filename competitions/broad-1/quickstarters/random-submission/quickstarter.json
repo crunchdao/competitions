@@ -1,6 +1,5 @@
 {
-    "title": "Random",
-    "description": "NOT FINAL",
+    "title": "Random Submission",
     "authors": [
         {
             "name": "Enzo CACERES",
@@ -9,5 +8,5 @@
     ],
     "language": "PYTHON",
     "notebook": true,
-    "entrypoint": "random.ipynb"
+    "entrypoint": "random-submission.ipynb"
 }

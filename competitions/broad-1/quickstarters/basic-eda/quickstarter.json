@@ -1,12 +1,12 @@
 {
-    "title": "QuickStarter CNN",
+    "title": "Basic EDA",
     "authors": [
         {
-            "name": "Jean Herelle",
+            "name": "Jean HERELLE",
             "link": "https://github.com/jeheran"
         }
     ],
     "language": "PYTHON",
     "notebook": true,
-    "entrypoint": "cnn.ipynb"
+    "entrypoint": "basic-EDA.ipynb"
 }
