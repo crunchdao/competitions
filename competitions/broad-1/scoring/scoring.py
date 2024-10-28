@@ -37,16 +37,16 @@ def check(
     phase_type: crunch.api.PhaseType
 ):
     with log("Check for required columns"):
-        missing = set(prediction.columns) - {'cell_id', 'gene', 'prediction', 'sample'}
+        difference = set(prediction.columns) ^ {'cell_id', 'gene', 'prediction', 'sample'}
 
-        if missing:
-            raise ParticipantVisibleError(f"Missing required columns: {', '.join(missing)}")
-
+        if difference:
+            raise ParticipantVisibleError(f"Missing or extra columns: {', '.join(difference)}")
+    
     with log("Check for missing samples"):
-        missing = set(prediction['sample'].unique()) - set(target_names)
+        difference = set(prediction['sample'].unique()) ^ set(target_names)
 
-        if missing:
-            raise ParticipantVisibleError(f"Missing required samples: {', '.join(missing)}")
+        if difference:
+            raise ParticipantVisibleError(f"Missing or extra samples: {', '.join(difference)}")
 
     with log("Filter predictions by samples once to avoid filtering in the loop"):
         group_by_sample = {
