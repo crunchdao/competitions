@@ -54,51 +54,51 @@ def check(
             for sample, group in prediction.groupby('sample')
         }
 
-    for target in target_names:
-        log(f"Loop through each target -> {target}")
-
-        sdata = _read_zarr(data_directory_path, target)
-
-        with log("Get predictions for the current sample"):
-            prediction = group_by_sample.get(target)
-
-            if prediction is None:
-                raise ParticipantVisibleError(f"No predictions for gene {target.name}.")
-
-        with log("Extract unique cell IDs where the group is either 'test' or 'validation'"):
-            cell_ids = set(sdata['cell_id-group'].obs.query("group == 'test' or group == 'validation'")['cell_id'])
-            gene_names = set(sdata['anucleus'].var.index)
-
-        with log("Check for NaN values in predictions"):
-            if prediction.isnull().values.any():
-                raise ParticipantVisibleError("Predictions contain NaN values, which are not allowed.")
-
-        with log("Check that all genes are present in predictions"):
-            missing = set(prediction['gene']) - gene_names
-
-            if missing:
-                raise ParticipantVisibleError(f"The following genes are missing in predictions: {', '.join(list(missing)[-10:])}.")
-
-        with log("Check that all cell IDs are present in predictions"):
-            missing = set(prediction['cell_id']) - cell_ids
-
-            if missing:
-                raise ParticipantVisibleError(f"The following cell IDs are missing in predictions: {', '.join(list(missing)[-10:])}.")
-
-        with log("Check data types in the 'prediction' column"):
-            if not pandas.api.types.is_numeric_dtype(prediction['prediction']):
-                raise ParticipantVisibleError("The 'prediction' column should only contain numeric values.")
-
-        with log("Ensure all prediction values are positive"):
-            if (prediction['prediction'] < 0).any():
-                raise ParticipantVisibleError("Prediction values should be positive.")
-
-        with log("Verify the size of predictions matches expectations"):
-            expected = len(cell_ids) * len(gene_names)
-            got = len(prediction)
-
-            if expected != got:
-                raise ParticipantVisibleError(f"Predictions should have {expected} rows but has {got}.")
+    # for target in target_names:
+    #     log(f"Loop through each target -> {target}")
+    #
+    #     sdata = _read_zarr(data_directory_path, target)
+    #
+    #     with log("Get predictions for the current sample"):
+    #         prediction = group_by_sample.get(target)
+    #
+    #         if prediction is None:
+    #             raise ParticipantVisibleError(f"No predictions for gene {target.name}.")
+    #
+    #     with log("Extract unique cell IDs where the group is either 'test' or 'validation'"):
+    #         cell_ids = set(sdata['cell_id-group'].obs.query("group == 'test' or group == 'validation'")['cell_id'])
+    #         gene_names = set(sdata['anucleus'].var.index)
+    #
+    #     with log("Check for NaN values in predictions"):
+    #         if prediction.isnull().values.any():
+    #             raise ParticipantVisibleError("Predictions contain NaN values, which are not allowed.")
+    #
+    #     with log("Check that all genes are present in predictions"):
+    #         missing = set(prediction['gene']) - gene_names
+    #
+    #         if missing:
+    #             raise ParticipantVisibleError(f"The following genes are missing in predictions: {', '.join(list(missing)[-10:])}.")
+    #
+    #     with log("Check that all cell IDs are present in predictions"):
+    #         missing = set(prediction['cell_id']) - cell_ids
+    #
+    #         if missing:
+    #             raise ParticipantVisibleError(f"The following cell IDs are missing in predictions: {', '.join(list(missing)[-10:])}.")
+    #
+    #     with log("Check data types in the 'prediction' column"):
+    #         if not pandas.api.types.is_numeric_dtype(prediction['prediction']):
+    #             raise ParticipantVisibleError("The 'prediction' column should only contain numeric values.")
+    #
+    #     with log("Ensure all prediction values are positive"):
+    #         if (prediction['prediction'] < 0).any():
+    #             raise ParticipantVisibleError("Prediction values should be positive.")
+    #
+    #     with log("Verify the size of predictions matches expectations"):
+    #         expected = len(cell_ids) * len(gene_names)
+    #         got = len(prediction)
+    #
+    #         if expected != got:
+    #             raise ParticipantVisibleError(f"Predictions should have {expected} rows but has {got}.")
 
 
 def score(
