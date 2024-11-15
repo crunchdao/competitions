@@ -62,9 +62,11 @@ def _validate_directories(
     items: typing.List[typing.Dict],
     extra_properties: typing.Dict[str, typing.Any]
 ):
-    success = True
     root = os.path.join(root, "quickstarters")
+    if not os.path.exists(root):
+        return True
 
+    success = True
     for quickstarter_root_name in os.listdir(root):
         quickstarter_root = os.path.join(root, quickstarter_root_name)
         if not os.path.isdir(quickstarter_root):
