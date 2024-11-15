@@ -3,7 +3,6 @@
 Welcome to the repository! This repository serves as a collaborative space to share and exchange ideas related to the ADIA Lab Market Prediction Competition. 
 Whether you're a seasoned data scientist or a curious enthusiast, you'll find a wealth of insightful notebooks and code to help you tackle this exciting challenge.
 
-
 ## About the ADIA Lab Market Prediction Competition
 
 The ADIA Lab Market Prediction Competition is an engaging and competitive event that challenges participants to develop robust market prediction models. 
