@@ -1,7 +1,6 @@
-# quant-venture-capital-resources
+![Cover](assets/cover.png)
 
-![xalpha](cover.jpeg)
-
+# Venture Capital Portfolio Prediction Rally
 
 This bounty marks the beginning of the "Rally" series, comprising multiple iterations aimed at refining our Data-Generating Process. Each Rally features a short submission phase (up to one month) to enhance this process. The steps involved in each Rally are as follows: the release of a new dataset version, model submission, out-of-sample scoring, result analysis, and the subsequent release of the next dataset version. This iterative process will continue until the desired level of accuracy is achieved.
 
@@ -18,3 +17,11 @@ We categorized startups to enable participants to develop supervised learning al
 ## Scoring
 
 To assess the AI's performance effectively, we will compute its F1 score. This metric balances precision (true positives identified by the algorithm) and recall (accounting for missed opportunities). The algorithm must accurately identify investment opportunities while minimizing false negatives and false positives for it to demonstrate effectiveness. The F1 score will provide a comprehensive view of the algorithm's accuracy and reliability.
+
+# Links
+
+- [Overview](https://hub.crunchdao.com/competitions/venture-capital-portfolio-prediction)
+- [Rules](https://hub.crunchdao.com/competitions/venture-capital-portfolio-prediction/rules)
+- [Documentation](https://docs.crunchdao.com/competitions/rallies/mid+one)
+- [Notebook](https://colab.research.google.com/github/crunchdao/quickstarters/blob/master/competitions/venture-capital-portfolio-prediction/quickstarters/quickstarter_xgboost/quickstarter_xgboost.ipynb)
+- [Discussion](https://discord.com/invite/veAtzsYn3M)
