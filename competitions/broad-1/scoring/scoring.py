@@ -117,32 +117,32 @@ def score(
     target_all = None
 
     for target, metrics in target_and_metrics:
-        log(f'Loop through each target -> {target.name}')
+        with log(f'Loop through each target -> {target.name}'):
 
-        if target.name == 'ALL':
-            target_all = (target, metrics)
-            continue
+            if target.name == 'ALL':
+                target_all = (target, metrics)
+                continue
 
-        with log(f'Get predictions for the current sample {target.name}'):
-            target_predictions = group_by_sample[target.name]
+            with log(f'Get predictions for the current sample {target.name}'):
+                target_predictions = group_by_sample[target.name]
 
-        filename = f'{group_type}-{target.name}.csv'
+            filename = f'{group_type}-{target.name}.csv'
 
-        with log(f"Load y_test from file {filename}"):
-            y_test = pandas.read_csv(os.path.join(data_directory_path, filename), index_col=0)
+            with log(f"Load y_test from file {filename}"):
+                y_test = pandas.read_csv(os.path.join(data_directory_path, filename), index_col=0)
 
-        with log("Filter prediction who need to be scored"):
-            filtered_predictions = target_predictions[target_predictions["cell_id"].isin(y_test.index)]
-            filtered_predictions = filtered_predictions.pivot(index='cell_id', columns='gene', values='prediction')
+            with log("Filter prediction who need to be scored"):
+                filtered_predictions = target_predictions[target_predictions["cell_id"].isin(y_test.index)]
+                filtered_predictions = filtered_predictions.pivot(index='cell_id', columns='gene', values='prediction')
 
-        with log("Score prediction"):
-            found_mse_metric = _find_metric_by_name(metrics, 'mse')
-            if found_mse_metric:
-                mse = _mean_squared_error(filtered_predictions, y_test)
-                scores[found_mse_metric.id] = crunch.scoring.ScoredMetric(mse)
-                mse_weighted_sum += mse * len(filtered_predictions)
-
-        total_cells += len(filtered_predictions)
+            with log("Score prediction"):
+                found_mse_metric = _find_metric_by_name(metrics, 'mse')
+                if found_mse_metric:
+                    mse = _mean_squared_error(filtered_predictions, y_test)
+                    scores[found_mse_metric.id] = crunch.scoring.ScoredMetric(mse)
+                    mse_weighted_sum += mse * len(filtered_predictions)
+    
+            total_cells += len(filtered_predictions)
 
     if target_all:
         found_mse_metric = _find_metric_by_name(target_all[1], 'mse')
