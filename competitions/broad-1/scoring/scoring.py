@@ -38,10 +38,10 @@ class ParticipantVisibleError(Exception):
 
 
 def check(
-    prediction: pandas.DataFrame,
-    data_directory_path: str,
-    target_names: typing.List[str],
-    phase_type: crunch.api.PhaseType
+        prediction: pandas.DataFrame,
+        data_directory_path: str,
+        target_names: typing.List[str],
+        phase_type: crunch.api.PhaseType
 ):
     with log("Check for required columns"):
         difference = set(prediction.columns) ^ {'cell_id', 'gene', 'prediction', 'sample'}
@@ -99,68 +99,75 @@ def check(
 
 
 def score(
-    prediction: pandas.DataFrame,
-    data_directory_path: str,
-    phase_type: crunch.api.PhaseType,
-    target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
+        prediction: pandas.DataFrame,
+        data_directory_path: str,
+        phase_type: crunch.api.PhaseType,
+        target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
 ):
     with log("Filter predictions by samples once to avoid filtering in the loop"):
         group_by_sample = {
             str(sample): group
             for sample, group in prediction.groupby('sample')
         }
+    with log("Determine group type based on phase type"):
+        group_type = 'validation' if phase_type == crunch.api.PhaseType.SUBMISSION else 'test'
 
     scores = {}
+    total_cells, mse_weighted_sum = 0, 0
+    target_all = None
+
     for target, metrics in target_and_metrics:
-        log(f"Loop through each target -> {target.name}")
+        log(f'Loop through each target -> {target.name}')
 
-        sdata = _read_zarr(data_directory_path, target.name)
+        if target.name == 'ALL':
+            target_all = (target, metrics)
+            continue
 
-        with log("Get predictions for the current sample"):
-            prediction = group_by_sample.get(target.name)
+        with log(f'Get predictions for the current sample {target.name}'):
+            target_predictions = group_by_sample[target.name]
 
-            if prediction is None:
-                raise ParticipantVisibleError(f"No predictions for gene {target.name}.")
+        filename = f'{group_type}-{target.name}.csv'
 
-        with log("Determine group type based on phase type"):
-            group_type = 'validation' if phase_type == crunch.api.PhaseType.SUBMISSION else 'test'
+        with log(f"Load y_test from file {filename}"):
+            y_test = pandas.read_csv(os.path.join(data_directory_path, filename), index_col=0)
 
-            cell_ids = sdata['cell_id-group'].obs.query("group == @group_type")['cell_id']
-            gene_names = sdata['anucleus'].var.index
-
-        with log("Filter data in 'anucleus' and construct DataFrame"):
-            anucleus = sdata['anucleus']
-            expected = pandas.DataFrame(
-                anucleus.X[anucleus.obs['cell_id'].isin(cell_ids), :],
-                columns=gene_names,
-                index=cell_ids.values.flatten()
-            )
-
-        with log("Pivot prediction DataFrame"):
-            prediction = prediction.pivot(index='cell_id', columns='gene', values='prediction')
+        with log("Filter prediction who need to be scored"):
+            filtered_predictions = target_predictions[target_predictions["cell_id"].isin(y_test.index)]
+            filtered_predictions = filtered_predictions.pivot(index='cell_id', columns='gene', values='prediction')
 
         with log("Score prediction"):
-            score = _mean_squared_error(prediction, expected)
+            found_mse_metric = _find_metric_by_name(metrics, 'mse')
+            if found_mse_metric:
+                mse = _mean_squared_error(filtered_predictions, y_test)
+                scores[found_mse_metric.id] = crunch.scoring.ScoredMetric(mse)
+                mse_weighted_sum += mse * len(filtered_predictions)
 
-        first_metric = metrics[0]
-        scores[first_metric.id] = crunch.scoring.ScoredMetric(score)
+        total_cells += len(filtered_predictions)
+
+    if target_all and _find_metric_by_name(target_all[1], 'mse'):
+        combine_mse = mse_weighted_sum / total_cells
+        scores[0] = crunch.scoring.ScoredMetric(combine_mse)  # TODO get virtual target
 
     return scores
 
 
+def _find_metric_by_name(metrics: typing.List[crunch.api.Metric],
+                         name: str) -> crunch.api.Metric:
+    return next((metric for metric in metrics if metric.name == name), None)
+
+
 def _mean_squared_error(
-    prediction: pandas.DataFrame,
-    y_test: pandas.DataFrame
+        prediction: pandas.DataFrame,
+        y_test: pandas.DataFrame
 ):
     with log("Ensure the same index and column order"):
         prediction = prediction.reindex(index=y_test.index, columns=y_test.columns)
 
-    with log("Extract cell and gene counts directly"):
-        cell_count = len(y_test.index)
-        gene_count = len(y_test.columns)
+    cell_count = len(y_test.index)
+    log(f"Cell counts is {cell_count}")
 
     with log("Calculate weights for cells"):
-        weight_on_cells = numpy.full(cell_count, 1 / cell_count)
+        weight_on_cells = numpy.ones(cell_count) / cell_count
 
     with log("Convert y_test and predictions to NumPy arrays"):
         A = y_test.to_numpy()
@@ -169,16 +176,16 @@ def _mean_squared_error(
         assert A.shape == B.shape, "Prediction and Expected gene expression do not match"
 
     with log("Calculate mean squared error"):
-        return numpy.sum(weight_on_cells * numpy.mean(numpy.square(A - B), axis=1))
+        return numpy.sum(weight_on_cells * (numpy.square(A - B)).mean(axis=1))
 
 
 def _read_zarr(
-    data_directory_path: str,
-    target_name: str
+        data_directory_path: str,
+        target_name: str
 ):
     zar_data = os.path.join(data_directory_path, f"{target_name}.zarr")
 
     with log("Read the Zarr data"):
-        sdata = spatialdata.read_zarr(zar_data, selection=("tables", ))
+        sdata = spatialdata.read_zarr(zar_data, selection=("tables",))
 
     return sdata
