@@ -38,10 +38,10 @@ class ParticipantVisibleError(Exception):
 
 
 def check(
-        prediction: pandas.DataFrame,
-        data_directory_path: str,
-        target_names: typing.List[str],
-        phase_type: crunch.api.PhaseType
+    prediction: pandas.DataFrame,
+    data_directory_path: str,
+    target_names: typing.List[str],
+    phase_type: crunch.api.PhaseType
 ):
     with log("Check for required columns"):
         difference = set(prediction.columns) ^ {'cell_id', 'gene', 'prediction', 'sample'}
@@ -99,10 +99,10 @@ def check(
 
 
 def score(
-        prediction: pandas.DataFrame,
-        data_directory_path: str,
-        phase_type: crunch.api.PhaseType,
-        target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
+    prediction: pandas.DataFrame,
+    data_directory_path: str,
+    phase_type: crunch.api.PhaseType,
+    target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
 ):
     with log("Filter predictions by samples once to avoid filtering in the loop"):
         group_by_sample = {
@@ -144,9 +144,11 @@ def score(
 
         total_cells += len(filtered_predictions)
 
-    if target_all and _find_metric_by_name(target_all[1], 'mse'):
-        combine_mse = mse_weighted_sum / total_cells
-        scores[0] = crunch.scoring.ScoredMetric(combine_mse)  # TODO get virtual target
+    if target_all:
+        found_mse_metric = _find_metric_by_name(target_all[1], 'mse')
+        if found_mse_metric:
+            combine_mse = mse_weighted_sum / total_cells
+            scores[found_mse_metric.id] = crunch.scoring.ScoredMetric(combine_mse)
 
     return scores
 
@@ -157,8 +159,8 @@ def _find_metric_by_name(metrics: typing.List[crunch.api.Metric],
 
 
 def _mean_squared_error(
-        prediction: pandas.DataFrame,
-        y_test: pandas.DataFrame
+    prediction: pandas.DataFrame,
+    y_test: pandas.DataFrame
 ):
     with log("Ensure the same index and column order"):
         prediction = prediction.reindex(index=y_test.index, columns=y_test.columns)
@@ -180,8 +182,8 @@ def _mean_squared_error(
 
 
 def _read_zarr(
-        data_directory_path: str,
-        target_name: str
+    data_directory_path: str,
+    target_name: str
 ):
     zar_data = os.path.join(data_directory_path, f"{target_name}.zarr")
 
