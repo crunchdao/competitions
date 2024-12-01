@@ -1,0 +1,12 @@
+{
+    "title": "Resnet50 + Ridge",
+    "authors": [
+        {
+            "name": "Alexis GASSMANN",
+            "link": "https://github.com/Tarandro"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "resnet50-plus-ridge.ipynb"
+}
