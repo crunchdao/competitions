@@ -250,8 +250,13 @@ def _is_log1p_normalization(arr: pandas.DataFrame):
 
 
 def _log1p_normalization(arr: pandas.DataFrame):
-    for column in arr.columns:
-        arr[column] /= numpy.sum(arr[column])
+    arr = pandas.DataFrame(
+        data={
+            column: arr[column] / numpy.sum(arr[column])
+            for column in arr.columns
+        },
+        index=arr.index
+    )
 
     return numpy.log1p(arr * 100)
 
