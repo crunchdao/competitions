@@ -167,7 +167,7 @@ def score(
                 mse_score = crunch.scoring.ScoredMetric(None, [])
                 normalized_mse_score = crunch.scoring.ScoredMetric(None, [])
 
-                for region_id, cell_ids in region_cell_mapping.groupby("region_id", observed=False):
+                for region_id, cell_ids in region_cell_mapping.groupby("region_id", observed=True):
                     cell_ids = set(cell_ids)
 
                     with log(f"Score region -> {region_id}"):
