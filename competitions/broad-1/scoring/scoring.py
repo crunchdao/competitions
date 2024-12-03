@@ -104,58 +104,82 @@ def score(
     phase_type: crunch.api.PhaseType,
     target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
 ):
+    group_type = 'validation' if phase_type == crunch.api.PhaseType.SUBMISSION else 'test'
+
     with log("Filter predictions by samples once to avoid filtering in the loop"):
         group_by_sample = {
             str(sample): group
-            for sample, group in prediction.groupby('sample')
+            for sample, group in prediction.groupby(prediction["sample"])
         }
-    with log("Determine group type based on phase type"):
-        group_type = 'validation' if phase_type == crunch.api.PhaseType.SUBMISSION else 'test'
 
     scores = {}
     total_cells, mse_weighted_sum = 0, 0
-    target_all = None
+    virtual_mse_metric = None
 
     for target, metrics in target_and_metrics:
-        with log(f'Loop through each target -> {target.name}'):
+        mse_metric = _find_metric_by_name(metrics, 'mse')
 
+        with log(f'Loop through each target -> {target.name}'):
             if target.name == 'ALL':
-                target_all = (target, metrics)
+                virtual_mse_metric = mse_metric
                 continue
 
             with log(f'Get predictions for the current sample {target.name}'):
-                target_predictions = group_by_sample[target.name]
+                target_predictions = group_by_sample.pop(target.name)
 
-            filename = f'{group_type}-{target.name}.csv'
-
-            with log(f"Load y_test from file {filename}"):
-                y_test = pandas.read_csv(os.path.join(data_directory_path, filename), index_col=0)
+            y_test_file_name = f'{group_type}-{target.name}.csv'
+            with log(f"Load y_test from file {y_test_file_name}"):
+                y_test_file_path = os.path.join(data_directory_path, y_test_file_name)
+                y_test = pandas.read_csv(y_test_file_path, index_col=0)
 
             with log("Filter prediction who need to be scored"):
                 filtered_predictions = target_predictions[target_predictions["cell_id"].isin(y_test.index)]
+                target_predictions = None
+
+            with log("Pivoting the dataframe"):
                 filtered_predictions = filtered_predictions.pivot(index='cell_id', columns='gene', values='prediction')
 
             with log("Score prediction"):
-                found_mse_metric = _find_metric_by_name(metrics, 'mse')
-                if found_mse_metric:
+                if mse_metric:
+                    if not _is_log1p_normalization(filtered_predictions):
+                        filtered_predictions = _log1p_normalization(filtered_predictions)
+
                     mse = _mean_squared_error(filtered_predictions, y_test)
-                    scores[found_mse_metric.id] = crunch.scoring.ScoredMetric(mse)
+
+                    scores[mse_metric.id] = crunch.scoring.ScoredMetric(mse)
                     mse_weighted_sum += mse * len(filtered_predictions)
-    
+
             total_cells += len(filtered_predictions)
 
-    if target_all:
-        found_mse_metric = _find_metric_by_name(target_all[1], 'mse')
-        if found_mse_metric:
-            combine_mse = mse_weighted_sum / total_cells
-            scores[found_mse_metric.id] = crunch.scoring.ScoredMetric(combine_mse)
+    if virtual_mse_metric:
+        combine_mse = mse_weighted_sum / total_cells
+        scores[virtual_mse_metric.id] = crunch.scoring.ScoredMetric(combine_mse)
 
     return scores
 
 
-def _find_metric_by_name(metrics: typing.List[crunch.api.Metric],
-                         name: str) -> crunch.api.Metric:
-    return next((metric for metric in metrics if metric.name == name), None)
+def _find_metric_by_name(
+    metrics: typing.List[crunch.api.Metric],
+    name: str
+) -> crunch.api.Metric:
+    return next((
+        metric
+        for metric in metrics
+        if metric.name == name
+    ), None)
+
+
+def _is_log1p_normalization(arr: pandas.DataFrame):
+    ones = (numpy.expm1(arr) / 100).sum()
+
+    return ((ones > 0.999) & (ones < 1.001)).all()
+
+
+def _log1p_normalization(arr: pandas.DataFrame):
+    for column in arr.columns:
+        arr[column] /= numpy.sum(arr[column])
+
+    return numpy.log1p(arr * 100)
 
 
 def _mean_squared_error(
