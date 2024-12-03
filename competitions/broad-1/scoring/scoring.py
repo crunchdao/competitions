@@ -243,22 +243,24 @@ def _find_metric_by_name(
     ), None)
 
 
-def _is_log1p_normalization(arr: pandas.DataFrame):
-    ones = (numpy.expm1(arr) / 100).sum()
+def _is_log1p_normalization(dataframe: pandas.DataFrame):
+    ones = (numpy.expm1(dataframe) / 100).sum()
 
     return ((ones > 0.98) & (ones < 1.01)).all()
 
 
-def _log1p_normalization(arr: pandas.DataFrame):
-    arr = pandas.DataFrame(
+def _log1p_normalization(dataframe: pandas.DataFrame):
+    EPSILON = 1e-10
+
+    dataframe = pandas.DataFrame(
         data={
-            column: arr[column] / numpy.sum(arr[column])
-            for column in arr.columns
+            column: dataframe[column] / (numpy.sum(dataframe[column]) + EPSILON)
+            for column in dataframe.columns
         },
-        index=arr.index
+        index=dataframe.index
     )
 
-    return numpy.log1p(arr * 100)
+    return numpy.log1p(dataframe * 100)
 
 
 def _mean_squared_error(
