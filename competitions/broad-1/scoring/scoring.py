@@ -7,7 +7,6 @@ import typing
 import crunch
 import numpy
 import pandas
-import spatialdata
 
 _LOG_DEPTH = 0
 
@@ -106,6 +105,22 @@ def score(
 ):
     group_type = 'validation' if phase_type == crunch.api.PhaseType.SUBMISSION else 'test'
 
+    with log("Load region-cell mapping"):
+        dataframe = pandas.read_csv(
+            os.path.join(data_directory_path, "region-cell_id-map.csv"),
+            index_col=0
+        )
+
+        dataframe["tissue_id"] = dataframe["tissue_id"].str.replace("Infl", "I").str.replace("Non", "N").astype("category")
+        dataframe["region_id"] = dataframe["region_id"].astype("category")
+
+        region_cell_mapping_by_sample = {
+            str(sample): group.set_index("region_id", drop=True)["cell_id"]
+            for sample, group in dataframe.groupby("tissue_id")
+        }
+
+        dataframe = None
+
     with log("Filter predictions by samples once to avoid filtering in the loop"):
         group_by_sample = {
             str(sample): group
@@ -113,19 +128,28 @@ def score(
         }
 
     scores = {}
-    total_cells, mse_weighted_sum = 0, 0
     virtual_mse_metric = None
+    virtual_normalized_mse_metric = None
+
+    mse_metric_ids = []
+    normalized_mse_metric_ids = []
 
     for target, metrics in target_and_metrics:
         mse_metric = _find_metric_by_name(metrics, 'mse')
+        normalized_mse_metric = _find_metric_by_name(metrics, 'mse-n')
 
         with log(f'Loop through each target -> {target.name}'):
             if target.name == 'ALL':
                 virtual_mse_metric = mse_metric
+                virtual_normalized_mse_metric = normalized_mse_metric
                 continue
 
-            with log(f'Get predictions for the current sample {target.name}'):
+            mse_metric_ids.append(mse_metric.id)
+            normalized_mse_metric_ids.append(normalized_mse_metric.id)
+
+            with log(f'Get data for the current sample {target.name}'):
                 target_predictions = group_by_sample.pop(target.name)
+                region_cell_mapping = region_cell_mapping_by_sample.pop(target.name)
 
             y_test_file_name = f'{group_type}-{target.name}.csv'
             with log(f"Load y_test from file {y_test_file_name}"):
@@ -140,22 +164,72 @@ def score(
                 filtered_predictions = filtered_predictions.pivot(index='cell_id', columns='gene', values='prediction')
 
             with log("Score prediction"):
-                if mse_metric:
-                    if not _is_log1p_normalization(filtered_predictions):
-                        filtered_predictions = _log1p_normalization(filtered_predictions)
+                mse_score = crunch.scoring.ScoredMetric(None, [])
+                normalized_mse_score = crunch.scoring.ScoredMetric(None, [])
 
-                    mse = _mean_squared_error(filtered_predictions, y_test)
+                for region_id, cell_ids in region_cell_mapping.groupby("region_id", observed=False):
+                    cell_ids = set(cell_ids)
 
-                    scores[mse_metric.id] = crunch.scoring.ScoredMetric(mse)
-                    mse_weighted_sum += mse * len(filtered_predictions)
+                    with log(f"Score region -> {region_id}"):
+                        with log(f"Filter y_test"):
+                            region_prediction = filtered_predictions[filtered_predictions.index.isin(cell_ids)]
 
-            total_cells += len(filtered_predictions)
+                        with log(f"Filter y_test"):
+                            region_y_test = y_test[y_test.index.isin(cell_ids)]
 
-    if virtual_mse_metric:
-        combine_mse = mse_weighted_sum / total_cells
-        scores[virtual_mse_metric.id] = crunch.scoring.ScoredMetric(combine_mse)
+                        with log(f"Calling score"):
+                            region_mse = _mean_squared_error(region_prediction, region_y_test)
+
+                            region_normalized_mse = region_mse
+                            if not _is_log1p_normalization(filtered_predictions):
+                                region_prediction = _log1p_normalization(region_prediction)
+                                region_normalized_mse = _mean_squared_error(region_prediction, region_y_test)
+
+                            mse_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_mse, False))
+                            normalized_mse_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_normalized_mse, False))
+
+                _average_details(mse_metric, mse_score, scores)
+                _average_details(normalized_mse_metric, normalized_mse_score, scores)
+
+    _compute_virtual(virtual_mse_metric, mse_metric_ids, scores)
+    _compute_virtual(virtual_normalized_mse_metric, normalized_mse_metric_ids, scores)
 
     return scores
+
+
+def _average_details(
+    metric: typing.Optional[crunch.api.Metric],
+    scored_metric: crunch.scoring.ScoredMetric,
+    scores: typing.Dict[int, crunch.scoring.ScoredMetric],
+):
+    if not metric:
+        return
+
+    scored_metric.value = numpy.mean([
+        detail.value
+        for detail in scored_metric.details
+    ])
+
+    scores[metric.id] = scored_metric
+
+
+def _compute_virtual(
+    metric: typing.Optional[crunch.api.Metric],
+    metric_ids: typing.List[int],
+    scores: typing.Dict[int, crunch.scoring.ScoredMetric]
+):
+    if not metric:
+        return
+
+    metric_ids = set(metric_ids)
+
+    mean = numpy.mean([
+        score.value
+        for metric_id, score in scores.items()
+        if metric_id in metric_ids
+    ])
+
+    scores[metric.id] = crunch.scoring.ScoredMetric(mean)
 
 
 def _find_metric_by_name(
@@ -172,7 +246,7 @@ def _find_metric_by_name(
 def _is_log1p_normalization(arr: pandas.DataFrame):
     ones = (numpy.expm1(arr) / 100).sum()
 
-    return ((ones > 0.999) & (ones < 1.001)).all()
+    return ((ones > 0.98) & (ones < 1.01)).all()
 
 
 def _log1p_normalization(arr: pandas.DataFrame):
@@ -190,9 +264,8 @@ def _mean_squared_error(
         prediction = prediction.reindex(index=y_test.index, columns=y_test.columns)
 
     cell_count = len(y_test.index)
-    log(f"Cell counts is {cell_count}")
 
-    with log("Calculate weights for cells"):
+    with log("Calculate weights for {cell_count} cells"):
         weight_on_cells = numpy.ones(cell_count) / cell_count
 
     with log("Convert y_test and predictions to NumPy arrays"):
@@ -210,6 +283,9 @@ def _read_zarr(
     target_name: str
 ):
     zar_data = os.path.join(data_directory_path, f"{target_name}.zarr")
+
+    with log("Importing spatialdata"):
+        import spatialdata
 
     with log("Read the Zarr data"):
         sdata = spatialdata.read_zarr(zar_data, selection=("tables",))
