@@ -6,7 +6,9 @@ import typing
 
 import crunch
 import numpy
+import numpy.typing
 import pandas
+from scipy import stats
 
 _LOG_DEPTH = 0
 
@@ -116,7 +118,7 @@ def score(
 
         region_cell_mapping_by_sample = {
             str(sample): group.set_index("region_id", drop=True)["cell_id"]
-            for sample, group in dataframe.groupby("tissue_id")
+            for sample, group in dataframe.groupby("tissue_id", observed=False)
         }
 
         dataframe = None
@@ -129,27 +131,26 @@ def score(
 
     scores = {}
     virtual_mse_metric = None
-    virtual_normalized_mse_metric = None
+    virtual_spearman_metric = None
 
     mse_metric_ids = []
-    normalized_mse_metric_ids = []
+    sperman_metric_ids = []
 
     for target, metrics in target_and_metrics:
         mse_metric = _find_metric_by_name(metrics, 'mse')
-        normalized_mse_metric = _find_metric_by_name(metrics, 'mse-n')
+        spearman_metric = _find_metric_by_name(metrics, 'spearman')
 
         with log(f'Loop through each target -> {target.name}'):
             if target.name == 'ALL':
                 virtual_mse_metric = mse_metric
-                virtual_normalized_mse_metric = normalized_mse_metric
+                virtual_spearman_metric = spearman_metric
                 continue
 
             mse_metric_ids.append(mse_metric.id)
-            normalized_mse_metric_ids.append(normalized_mse_metric.id)
+            sperman_metric_ids.append(spearman_metric.id)
 
-            with log(f'Get data for the current sample {target.name}'):
-                target_predictions = group_by_sample.pop(target.name)
-                region_cell_mapping = region_cell_mapping_by_sample.pop(target.name)
+            target_predictions = group_by_sample.pop(target.name)
+            region_cell_mapping = region_cell_mapping_by_sample.pop(target.name)
 
             y_test_file_name = f'{group_type}-{target.name}.csv'
             with log(f"Load y_test from file {y_test_file_name}"):
@@ -165,7 +166,7 @@ def score(
 
             with log("Score prediction"):
                 mse_score = crunch.scoring.ScoredMetric(None, [])
-                normalized_mse_score = crunch.scoring.ScoredMetric(None, [])
+                spearman_score = crunch.scoring.ScoredMetric(None, [])
 
                 for region_id, cell_ids in region_cell_mapping.groupby("region_id", observed=True):
                     cell_ids = set(cell_ids)
@@ -177,22 +178,23 @@ def score(
                         with log(f"Filter y_test"):
                             region_y_test = y_test[y_test.index.isin(cell_ids)]
 
-                        with log(f"Calling score"):
+                        with log("Ensure the same index and column order"):
+                            region_prediction = region_prediction.reindex(index=region_y_test.index, columns=region_y_test.columns)
+
+                        with log(f"Calling _mean_squared_error"):
                             region_mse = _mean_squared_error(region_prediction, region_y_test)
 
-                            region_normalized_mse = region_mse
-                            if not _is_log1p_normalization(filtered_predictions):
-                                region_prediction = _log1p_normalization(region_prediction)
-                                region_normalized_mse = _mean_squared_error(region_prediction, region_y_test)
+                        with log(f"Calling _spearman"):
+                            region_spearman = _spearman(region_prediction, region_y_test)
 
-                            mse_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_mse, False))
-                            normalized_mse_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_normalized_mse, False))
+                        mse_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_mse, False))
+                        spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman, False))
 
                 _average_details(mse_metric, mse_score, scores)
-                _average_details(normalized_mse_metric, normalized_mse_score, scores)
+                _average_details(spearman_metric, spearman_score, scores)
 
     _compute_virtual(virtual_mse_metric, mse_metric_ids, scores)
-    _compute_virtual(virtual_normalized_mse_metric, normalized_mse_metric_ids, scores)
+    _compute_virtual(virtual_spearman_metric, sperman_metric_ids, scores)
 
     return scores
 
@@ -243,46 +245,40 @@ def _find_metric_by_name(
     ), None)
 
 
-def _is_log1p_normalization(dataframe: pandas.DataFrame):
-    ones = (numpy.expm1(dataframe) / 100).sum()
-
-    return ((ones > 0.98) & (ones < 1.01)).all()
-
-
-def _log1p_normalization(dataframe: pandas.DataFrame):
-    EPSILON = 1e-10
-
-    dataframe = pandas.DataFrame(
-        data={
-            column: dataframe[column] / (numpy.sum(dataframe[column]) + EPSILON)
-            for column in dataframe.columns
-        },
-        index=dataframe.index
-    )
-
-    return numpy.log1p(dataframe * 100)
-
-
 def _mean_squared_error(
     prediction: pandas.DataFrame,
-    y_test: pandas.DataFrame
+    y_test: pandas.DataFrame,
 ):
-    with log("Ensure the same index and column order"):
-        prediction = prediction.reindex(index=y_test.index, columns=y_test.columns)
-
     cell_count = len(y_test.index)
+    weight_on_cells = numpy.ones(cell_count) / cell_count
 
-    with log("Calculate weights for {cell_count} cells"):
-        weight_on_cells = numpy.ones(cell_count) / cell_count
+    A = y_test.to_numpy()
+    B = prediction.to_numpy()
 
-    with log("Convert y_test and predictions to NumPy arrays"):
-        A = y_test.to_numpy()
-        B = prediction.to_numpy()
+    return numpy.sum(weight_on_cells * (numpy.square(A - B)).mean(axis=1))
 
-        assert A.shape == B.shape, "Prediction and Expected gene expression do not match"
 
-    with log("Calculate mean squared error"):
-        return numpy.sum(weight_on_cells * (numpy.square(A - B)).mean(axis=1))
+def _spearman(
+    prediction: pandas.DataFrame,
+    y_test: pandas.DataFrame,
+):
+    cell_count = len(y_test.index)
+    weight_on_cells = numpy.ones(cell_count) / cell_count
+
+    A = y_test.to_numpy()
+    B = prediction.to_numpy()
+
+    rank_A = stats.rankdata(A, axis=1)
+    rank_B = stats.rankdata(B, axis=1)
+
+    corrs_cell = (
+        numpy.multiply(rank_A - numpy.mean(rank_A), rank_B - numpy.mean(rank_B)).mean(axis=1)
+        / (numpy.std(rank_A, axis=1) * numpy.std(rank_B, axis=1))
+    )
+
+    corrs_cell[numpy.isnan(corrs_cell)] = 0
+
+    return numpy.sum(weight_on_cells * corrs_cell)
 
 
 def _read_zarr(
