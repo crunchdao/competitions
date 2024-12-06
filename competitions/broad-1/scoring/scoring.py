@@ -146,8 +146,10 @@ def score(
                 virtual_spearman_metric = spearman_metric
                 continue
 
-            mse_metric_ids.append(mse_metric.id)
-            sperman_metric_ids.append(spearman_metric.id)
+            if mse_metric:
+                mse_metric_ids.append(mse_metric.id)
+            if spearman_metric:
+                sperman_metric_ids.append(spearman_metric.id)
 
             target_predictions = group_by_sample.pop(target.name)
             region_cell_mapping = region_cell_mapping_by_sample.pop(target.name)
@@ -270,6 +272,7 @@ def _spearman(
 
     rank_A = stats.rankdata(A, axis=1)
     rank_B = stats.rankdata(B, axis=1)
+
 
     corrs_cell = (
         numpy.multiply(rank_A - numpy.mean(rank_A), rank_B - numpy.mean(rank_B)).mean(axis=1)
