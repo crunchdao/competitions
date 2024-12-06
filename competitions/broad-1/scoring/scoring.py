@@ -6,8 +6,9 @@ import typing
 
 import crunch
 import numpy
+import numpy.typing
 import pandas
-import spatialdata
+import scipy.stats
 
 _LOG_DEPTH = 0
 
@@ -104,72 +105,182 @@ def score(
     phase_type: crunch.api.PhaseType,
     target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
 ):
+    group_type = 'validation' if phase_type == crunch.api.PhaseType.SUBMISSION else 'test'
+
+    with log("Load region-cell mapping"):
+        dataframe = pandas.read_csv(
+            os.path.join(data_directory_path, "region-cell_id-map.csv"),
+            index_col=0
+        )
+
+        dataframe["tissue_id"] = dataframe["tissue_id"].str.replace("Infl", "I").str.replace("Non", "N").astype("category")
+        dataframe["region_id"] = dataframe["region_id"].astype("category")
+
+        region_cell_mapping_by_sample = {
+            str(sample): group.set_index("region_id", drop=True)["cell_id"]
+            for sample, group in dataframe.groupby("tissue_id", observed=False)
+        }
+
+        dataframe = None
+
     with log("Filter predictions by samples once to avoid filtering in the loop"):
         group_by_sample = {
             str(sample): group
-            for sample, group in prediction.groupby('sample')
+            for sample, group in prediction.groupby(prediction["sample"])
         }
 
     scores = {}
+    virtual_mse_metric = None
+    virtual_spearman_metric = None
+
+    mse_metric_ids = []
+    sperman_metric_ids = []
+
     for target, metrics in target_and_metrics:
-        log(f"Loop through each target -> {target.name}")
+        mse_metric = _find_metric_by_name(metrics, 'mse')
+        spearman_metric = _find_metric_by_name(metrics, 'spearman')
 
-        sdata = _read_zarr(data_directory_path, target.name)
+        with log(f'Loop through each target -> {target.name}'):
+            if target.name == 'ALL':
+                virtual_mse_metric = mse_metric
+                virtual_spearman_metric = spearman_metric
+                continue
 
-        with log("Get predictions for the current sample"):
-            prediction = group_by_sample.get(target.name)
+            if mse_metric:
+                mse_metric_ids.append(mse_metric.id)
+            if spearman_metric:
+                sperman_metric_ids.append(spearman_metric.id)
 
-            if prediction is None:
-                raise ParticipantVisibleError(f"No predictions for gene {target.name}.")
+            target_predictions = group_by_sample.pop(target.name)
+            region_cell_mapping = region_cell_mapping_by_sample.pop(target.name)
 
-        with log("Determine group type based on phase type"):
-            group_type = 'validation' if phase_type == crunch.api.PhaseType.SUBMISSION else 'test'
+            y_test_file_name = f'{group_type}-{target.name}.csv'
+            with log(f"Load y_test from file {y_test_file_name}"):
+                y_test_file_path = os.path.join(data_directory_path, y_test_file_name)
+                y_test = pandas.read_csv(y_test_file_path, index_col=0)
 
-            cell_ids = sdata['cell_id-group'].obs.query("group == @group_type")['cell_id']
-            gene_names = sdata['anucleus'].var.index
+            with log("Filter prediction who need to be scored"):
+                filtered_predictions = target_predictions[target_predictions["cell_id"].isin(y_test.index)]
+                target_predictions = None
 
-        with log("Filter data in 'anucleus' and construct DataFrame"):
-            anucleus = sdata['anucleus']
-            expected = pandas.DataFrame(
-                anucleus.X[anucleus.obs['cell_id'].isin(cell_ids), :],
-                columns=gene_names,
-                index=cell_ids.values.flatten()
-            )
+            with log("Pivoting the dataframe"):
+                filtered_predictions = filtered_predictions.pivot(index='cell_id', columns='gene', values='prediction')
 
-        with log("Pivot prediction DataFrame"):
-            prediction = prediction.pivot(index='cell_id', columns='gene', values='prediction')
+            with log("Score prediction"):
+                mse_score = crunch.scoring.ScoredMetric(None, [])
+                spearman_score = crunch.scoring.ScoredMetric(None, [])
 
-        with log("Score prediction"):
-            score = _mean_squared_error(prediction, expected)
+                for region_id, cell_ids in region_cell_mapping.groupby("region_id", observed=True):
+                    cell_ids = set(cell_ids)
 
-        first_metric = metrics[0]
-        scores[first_metric.id] = crunch.scoring.ScoredMetric(score)
+                    with log(f"Score region -> {region_id}"):
+                        with log(f"Filter y_test"):
+                            region_prediction = filtered_predictions[filtered_predictions.index.isin(cell_ids)]
+
+                        with log(f"Filter y_test"):
+                            region_y_test = y_test[y_test.index.isin(cell_ids)]
+
+                        with log("Ensure the same index and column order"):
+                            region_prediction = region_prediction.reindex(index=region_y_test.index, columns=region_y_test.columns)
+
+                        with log(f"Calling _mean_squared_error"):
+                            region_mse = _mean_squared_error(region_prediction, region_y_test)
+
+                        with log(f"Calling _spearman"):
+                            region_spearman = _spearman(region_prediction, region_y_test)
+
+                        mse_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_mse, False))
+                        spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman, False))
+
+                _average_details(mse_metric, mse_score, scores)
+                _average_details(spearman_metric, spearman_score, scores)
+
+    _compute_virtual(virtual_mse_metric, mse_metric_ids, scores)
+    _compute_virtual(virtual_spearman_metric, sperman_metric_ids, scores)
 
     return scores
 
 
+def _average_details(
+    metric: typing.Optional[crunch.api.Metric],
+    scored_metric: crunch.scoring.ScoredMetric,
+    scores: typing.Dict[int, crunch.scoring.ScoredMetric],
+):
+    if not metric:
+        return
+
+    scored_metric.value = numpy.mean([
+        detail.value
+        for detail in scored_metric.details
+    ])
+
+    scores[metric.id] = scored_metric
+
+
+def _compute_virtual(
+    metric: typing.Optional[crunch.api.Metric],
+    metric_ids: typing.List[int],
+    scores: typing.Dict[int, crunch.scoring.ScoredMetric]
+):
+    if not metric:
+        return
+
+    metric_ids = set(metric_ids)
+
+    mean = numpy.mean([
+        score.value
+        for metric_id, score in scores.items()
+        if metric_id in metric_ids
+    ])
+
+    scores[metric.id] = crunch.scoring.ScoredMetric(mean)
+
+
+def _find_metric_by_name(
+    metrics: typing.List[crunch.api.Metric],
+    name: str
+) -> crunch.api.Metric:
+    return next((
+        metric
+        for metric in metrics
+        if metric.name == name
+    ), None)
+
+
 def _mean_squared_error(
     prediction: pandas.DataFrame,
-    y_test: pandas.DataFrame
+    y_test: pandas.DataFrame,
 ):
-    with log("Ensure the same index and column order"):
-        prediction = prediction.reindex(index=y_test.index, columns=y_test.columns)
+    cell_count = len(y_test.index)
+    weight_on_cells = numpy.ones(cell_count) / cell_count
 
-    with log("Extract cell and gene counts directly"):
-        cell_count = len(y_test.index)
-        gene_count = len(y_test.columns)
+    A = y_test.to_numpy()
+    B = prediction.to_numpy()
 
-    with log("Calculate weights for cells"):
-        weight_on_cells = numpy.full(cell_count, 1 / cell_count)
+    return numpy.sum(weight_on_cells * (numpy.square(A - B)).mean(axis=1))
 
-    with log("Convert y_test and predictions to NumPy arrays"):
-        A = y_test.to_numpy()
-        B = prediction.to_numpy()
 
-        assert A.shape == B.shape, "Prediction and Expected gene expression do not match"
+def _spearman(
+    prediction: pandas.DataFrame,
+    y_test: pandas.DataFrame,
+):
+    cell_count = len(y_test.index)
+    weight_on_cells = numpy.ones(cell_count) / cell_count
 
-    with log("Calculate mean squared error"):
-        return numpy.sum(weight_on_cells * numpy.mean(numpy.square(A - B), axis=1))
+    A = y_test.to_numpy()
+    B = prediction.to_numpy()
+
+    rank_A = scipy.stats.rankdata(A, axis=1)
+    rank_B = scipy.stats.rankdata(B, axis=1)
+
+    corrs_cell = (
+        numpy.multiply(rank_A - numpy.mean(rank_A), rank_B - numpy.mean(rank_B)).mean(axis=1)
+        / (numpy.std(rank_A, axis=1) * numpy.std(rank_B, axis=1))
+    )
+
+    corrs_cell[numpy.isnan(corrs_cell)] = 0
+
+    return numpy.sum(weight_on_cells * corrs_cell)
 
 
 def _read_zarr(
@@ -178,7 +289,10 @@ def _read_zarr(
 ):
     zar_data = os.path.join(data_directory_path, f"{target_name}.zarr")
 
+    with log("Importing spatialdata"):
+        import spatialdata
+
     with log("Read the Zarr data"):
-        sdata = spatialdata.read_zarr(zar_data, selection=("tables", ))
+        sdata = spatialdata.read_zarr(zar_data, selection=("tables",))
 
     return sdata
