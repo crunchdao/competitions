@@ -8,7 +8,7 @@ import crunch
 import numpy
 import numpy.typing
 import pandas
-from scipy import stats
+import scipy.stats
 
 _LOG_DEPTH = 0
 
@@ -270,9 +270,8 @@ def _spearman(
     A = y_test.to_numpy()
     B = prediction.to_numpy()
 
-    rank_A = stats.rankdata(A, axis=1)
-    rank_B = stats.rankdata(B, axis=1)
-
+    rank_A = scipy.stats.rankdata(A, axis=1)
+    rank_B = scipy.stats.rankdata(B, axis=1)
 
     corrs_cell = (
         numpy.multiply(rank_A - numpy.mean(rank_A), rank_B - numpy.mean(rank_B)).mean(axis=1)
