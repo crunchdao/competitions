@@ -1,3 +1,4 @@
+import re
 import typing
 
 import crunch.custom
@@ -46,6 +47,9 @@ def check(
     with tracer.log("Checking for the default comment"):
         if "<!-- Don't forget to change me -->" in content:
             raise ParticipantVisibleError(f"Default comment found in `{report_md_file_path}`. Has it been edited?")
+
+    with tracer.log("Remove all comments"):
+        content = re.sub(r"<!--.+?-->", r"", content)
 
     with tracer.log("Counting non blank lines"):
         line_count = 0
