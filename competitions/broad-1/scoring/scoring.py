@@ -1,41 +1,20 @@
-import contextlib
-import datetime
-import gc
 import os
 import typing
 
 import crunch
+import crunch.utils
 import numpy
 import numpy.typing
 import pandas
 import scipy.stats
 
-_LOG_DEPTH = 0
-
-
-@contextlib.contextmanager
-def log(action: str):
-    global _LOG_DEPTH
-
-    start = datetime.datetime.now()
-    print(start, "  " * _LOG_DEPTH, action)
-
-    try:
-        _LOG_DEPTH += 1
-
-        yield True
-    finally:
-        _LOG_DEPTH -= 1
-
-        gc.collect()
-
-        end = datetime.datetime.now()
-        print(end, "  " * _LOG_DEPTH, action, "took", end - start)
-
 
 class ParticipantVisibleError(Exception):
     """Custom exception for errors related to participant visibility."""
     pass
+
+
+tracer = crunch.utils.Tracer()
 
 
 def check(
@@ -44,54 +23,54 @@ def check(
     target_names: typing.List[str],
     phase_type: crunch.api.PhaseType
 ):
-    with log("Check for required columns"):
+    with tracer.log("Check for required columns"):
         difference = set(prediction.columns) ^ {'cell_id', 'gene', 'prediction', 'sample'}
 
         if difference:
             raise ParticipantVisibleError(f"Missing or extra columns: {', '.join(difference)}")
 
     prediction.set_index("sample", drop=True, inplace=True)
-    with log("Check for missing samples"):
+    with tracer.log("Check for missing samples"):
         difference = set(prediction.index.unique()) ^ set(target_names)
 
         if difference:
             raise ParticipantVisibleError(f"Missing or extra samples: {', '.join(difference)}")
 
-    for target_name in target_names:
-        with log(f"Filter prediction at target -> {target_name}"):
+    for target_name in tracer.log(target_names, "Checking target -> {value}"):
+        with tracer.log(f"Filter prediction at target -> {target_name}"):
             prediction_slice = prediction[prediction.index == target_name]
 
         sdata = _read_zarr(data_directory_path, target_name)
 
-        with log("Extract unique cell IDs where the group is either 'test' or 'validation'"):
+        with tracer.log("Extract unique cell IDs where the group is either 'test' or 'validation'"):
             cell_ids = set(sdata['cell_id-group'].obs.query("group == 'test' or group == 'validation'")['cell_id'])
             gene_names = set(sdata['anucleus'].var.index)
 
-        with log("Check for NaN values in predictions"):
+        with tracer.log("Check for NaN values in predictions"):
             if prediction_slice.isnull().values.any():
                 raise ParticipantVisibleError("Predictions contain NaN values, which are not allowed.")
 
-        with log("Check that all genes are present in predictions"):
+        with tracer.log("Check that all genes are present in predictions"):
             missing = set(prediction_slice['gene']) - gene_names
 
             if missing:
                 raise ParticipantVisibleError(f"The following genes are missing in predictions: {', '.join(list(missing)[-10:])}.")
 
-        with log("Check that all cell IDs are present in predictions"):
+        with tracer.log("Check that all cell IDs are present in predictions"):
             missing = set(prediction_slice['cell_id']) - cell_ids
 
             if missing:
                 raise ParticipantVisibleError(f"The following cell IDs are missing in predictions: {', '.join(list(map(str, missing))[-10:])}.")
 
-        with log("Check data types in the 'prediction' column"):
+        with tracer.log("Check data types in the 'prediction' column"):
             if not pandas.api.types.is_numeric_dtype(prediction_slice['prediction']):
                 raise ParticipantVisibleError("The 'prediction' column should only contain numeric values.")
 
-        with log("Ensure all prediction values are positive"):
+        with tracer.log("Ensure all prediction values are positive"):
             if (prediction_slice['prediction'] < 0).any():
                 raise ParticipantVisibleError("Prediction values should be positive.")
 
-        with log("Verify the size of predictions matches expectations"):
+        with tracer.log("Verify the size of predictions matches expectations"):
             expected = len(cell_ids) * len(gene_names)
             got = len(prediction_slice)
 
@@ -107,7 +86,7 @@ def score(
 ):
     group_type = 'validation' if phase_type == crunch.api.PhaseType.SUBMISSION else 'test'
 
-    with log("Load region-cell mapping"):
+    with tracer.log("Load region-cell mapping"):
         dataframe = pandas.read_csv(
             os.path.join(data_directory_path, "region-cell_id-map.csv"),
             index_col=0
@@ -123,7 +102,7 @@ def score(
 
         dataframe = None
 
-    with log("Filter predictions by samples once to avoid filtering in the loop"):
+    with tracer.log("Filter predictions by samples once to avoid filtering in the loop"):
         group_by_sample = {
             str(sample): group
             for sample, group in prediction.groupby(prediction["sample"])
@@ -136,64 +115,62 @@ def score(
     mse_metric_ids = []
     sperman_metric_ids = []
 
-    for target, metrics in target_and_metrics:
+    for target, metrics in tracer.loop(target_and_metrics, lambda x: f'Loop through each target -> {x[0].name}'):
         mse_metric = _find_metric_by_name(metrics, 'mse')
         spearman_metric = _find_metric_by_name(metrics, 'spearman')
 
-        with log(f'Loop through each target -> {target.name}'):
-            if target.name == 'ALL':
-                virtual_mse_metric = mse_metric
-                virtual_spearman_metric = spearman_metric
-                continue
+        if target.name == 'ALL':
+            virtual_mse_metric = mse_metric
+            virtual_spearman_metric = spearman_metric
+            continue
 
-            if mse_metric:
-                mse_metric_ids.append(mse_metric.id)
-            if spearman_metric:
-                sperman_metric_ids.append(spearman_metric.id)
+        if mse_metric:
+            mse_metric_ids.append(mse_metric.id)
+        if spearman_metric:
+            sperman_metric_ids.append(spearman_metric.id)
 
-            target_predictions = group_by_sample.pop(target.name)
-            region_cell_mapping = region_cell_mapping_by_sample.pop(target.name)
+        target_predictions = group_by_sample.pop(target.name)
+        region_cell_mapping = region_cell_mapping_by_sample.pop(target.name)
 
-            y_test_file_name = f'{group_type}-{target.name}.csv'
-            with log(f"Load y_test from file {y_test_file_name}"):
-                y_test_file_path = os.path.join(data_directory_path, y_test_file_name)
-                y_test = pandas.read_csv(y_test_file_path, index_col=0)
+        y_test_file_name = f'{group_type}-{target.name}.csv'
+        with tracer.log(f"Load y_test from file {y_test_file_name}"):
+            y_test_file_path = os.path.join(data_directory_path, y_test_file_name)
+            y_test = pandas.read_csv(y_test_file_path, index_col=0)
 
-            with log("Filter prediction who need to be scored"):
-                filtered_predictions = target_predictions[target_predictions["cell_id"].isin(y_test.index)]
-                target_predictions = None
+        with tracer.log("Filter prediction who need to be scored"):
+            filtered_predictions = target_predictions[target_predictions["cell_id"].isin(y_test.index)]
+            target_predictions = None
 
-            with log("Pivoting the dataframe"):
-                filtered_predictions = filtered_predictions.pivot(index='cell_id', columns='gene', values='prediction')
+        with tracer.log("Pivoting the dataframe"):
+            filtered_predictions = filtered_predictions.pivot(index='cell_id', columns='gene', values='prediction')
 
-            with log("Score prediction"):
-                mse_score = crunch.scoring.ScoredMetric(None, [])
-                spearman_score = crunch.scoring.ScoredMetric(None, [])
+        with tracer.log("Score prediction"):
+            mse_score = crunch.scoring.ScoredMetric(None, [])
+            spearman_score = crunch.scoring.ScoredMetric(None, [])
 
-                for region_id, cell_ids in region_cell_mapping.groupby("region_id", observed=True):
-                    cell_ids = set(cell_ids)
+            for region_id, cell_ids in tracer.loop(region_cell_mapping.groupby("region_id", observed=True), lambda x: f"Score region -> {x[0]}"):
+                cell_ids = set(cell_ids)
 
-                    with log(f"Score region -> {region_id}"):
-                        with log(f"Filter y_test"):
-                            region_prediction = filtered_predictions[filtered_predictions.index.isin(cell_ids)]
+                with tracer.log(f"Filter y_test"):
+                    region_prediction = filtered_predictions[filtered_predictions.index.isin(cell_ids)]
 
-                        with log(f"Filter y_test"):
-                            region_y_test = y_test[y_test.index.isin(cell_ids)]
+                with tracer.log(f"Filter y_test"):
+                    region_y_test = y_test[y_test.index.isin(cell_ids)]
 
-                        with log("Ensure the same index and column order"):
-                            region_prediction = region_prediction.reindex(index=region_y_test.index, columns=region_y_test.columns)
+                with tracer.log("Ensure the same index and column order"):
+                    region_prediction = region_prediction.reindex(index=region_y_test.index, columns=region_y_test.columns)
 
-                        with log(f"Calling _mean_squared_error"):
-                            region_mse = _mean_squared_error(region_prediction, region_y_test)
+                with tracer.log(f"Calling _mean_squared_error"):
+                    region_mse = _mean_squared_error(region_prediction, region_y_test)
 
-                        with log(f"Calling _spearman"):
-                            region_spearman = _spearman(region_prediction, region_y_test)
+                with tracer.log(f"Calling _spearman"):
+                    region_spearman = _spearman(region_prediction, region_y_test)
 
-                        mse_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_mse, False))
-                        spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman, False))
+                mse_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_mse, False))
+                spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman, False))
 
-                _average_details(mse_metric, mse_score, scores)
-                _average_details(spearman_metric, spearman_score, scores)
+            _average_details(mse_metric, mse_score, scores)
+            _average_details(spearman_metric, spearman_score, scores)
 
     _compute_virtual(virtual_mse_metric, mse_metric_ids, scores)
     _compute_virtual(virtual_spearman_metric, sperman_metric_ids, scores)
@@ -289,10 +266,10 @@ def _read_zarr(
 ):
     zar_data = os.path.join(data_directory_path, f"{target_name}.zarr")
 
-    with log("Importing spatialdata"):
+    with tracer.log("Importing spatialdata"):
         import spatialdata
 
-    with log("Read the Zarr data"):
+    with tracer.log("Read the Zarr data"):
         sdata = spatialdata.read_zarr(zar_data, selection=("tables",))
 
     return sdata
