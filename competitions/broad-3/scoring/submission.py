@@ -48,7 +48,7 @@ def check(
             raise ParticipantVisibleError(f"Default comment found in `{report_md_file_path}`. Has it been edited?")
 
     with tracer.log("Counting non blank lines"):
-        count = 0
+        line_count = 0
         for line in content.splitlines():
             line = line.strip()
 
@@ -56,11 +56,15 @@ def check(
                 continue
 
             # TODO Should titles be skipped?
-            count += 1
+            line_count += 1
 
-        minimum_line_count = 10
-        if count < minimum_line_count:
-            raise ParticipantVisibleError(f"`{report_md_file_path}` must be {minimum_line_count} lines long, only found {count} (non blank) line(s).")
+        minimum_line_count = 15
+        if line_count < minimum_line_count:
+            plural, be = "", "was"
+            if line_count > 1:
+                plural, be = "s", "were"
+
+            raise ParticipantVisibleError(f"`{report_md_file_path}` must be longer than {minimum_line_count} lines, but only {line_count} non-blank line{plural} {be} found.")
 
 
 def _find_file_by_path(
