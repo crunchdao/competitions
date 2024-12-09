@@ -1,0 +1,11 @@
+{
+    "title": "Random Submission",
+    "authors": [
+        {
+            "name": "Abdennour BOUTRIG"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "random-submission.ipynb"
+}
