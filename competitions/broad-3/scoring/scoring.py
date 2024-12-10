@@ -44,14 +44,16 @@ def check(
 
         if not numpy.array_equal(prediction.index.values, expected_index):
             truncated = crunch.custom.utils.truncate(prediction.index.values)
-            raise ParticipantVisibleError(f"The prediction DataFrame index must run from 1 to {len(expected_genes)}, but got [{truncated}]")
+            raise ParticipantVisibleError(f"Rank (as a DataFrame.index) must be from 1 to {len(expected_genes)}, but got [{truncated}]")
 
     with tracer.log("Check that the predicted genes match the expected genes exactly"):
-        predicted_genes = set(prediction['Gene Name'])
+        difference = crunch.custom.utils.delta_message(
+            expected_genes,
+            set(prediction['Gene Name']),
+        )
 
-        if expected_genes != predicted_genes:
-            truncated = crunch.custom.utils.delta_message(expected_genes, predicted_genes)
-            raise ParticipantVisibleError(f"The predicted genes do not match the expected genes: {truncated}")
+        if difference:
+            raise ParticipantVisibleError(f"Gene names do not match: {difference}")
 
 
 def score(
@@ -61,4 +63,4 @@ def score(
     target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
 ):
     """TODO"""
-    pass
+    raise NotImplementedError()
