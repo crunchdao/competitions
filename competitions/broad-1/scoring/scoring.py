@@ -2,6 +2,7 @@ import os
 import typing
 
 import crunch
+import crunch.custom.utils
 import crunch.utils
 import numpy
 import numpy.typing
@@ -23,21 +24,30 @@ def check(
     target_names: typing.List[str],
     phase_type: crunch.api.PhaseType
 ):
+    if "ALL" in target_names:
+        target_names.remove("ALL")
+
     with tracer.log("Check for required columns"):
-        difference = set(prediction.columns) ^ {'cell_id', 'gene', 'prediction', 'sample'}
+        difference = crunch.custom.utils.delta_message(
+            {'cell_id', 'gene', 'prediction', 'sample'},
+            set(prediction.columns),
+        )
 
         if difference:
-            raise ParticipantVisibleError(f"Missing or extra columns: {', '.join(difference)}")
+            raise ParticipantVisibleError(f"Columns do not match: {difference}")
 
     prediction.set_index("sample", drop=True, inplace=True)
     with tracer.log("Check for missing samples"):
-        difference = set(prediction.index.unique()) ^ set(target_names)
+        difference = crunch.custom.utils.delta_message(
+            set(target_names),
+            set(prediction.index.unique()),
+        )
 
         if difference:
-            raise ParticipantVisibleError(f"Missing or extra samples: {', '.join(difference)}")
+            raise ParticipantVisibleError(f"Samples do not match: {difference}")
 
     for target_name in tracer.loop(target_names, "Checking target -> {value}"):
-        with tracer.log(f"Filter prediction at target -> {target_name}"):
+        with tracer.log(f"Filter prediction at target"):
             prediction_slice = prediction[prediction.index == target_name]
 
         sdata = _read_zarr(data_directory_path, target_name)
@@ -48,34 +58,40 @@ def check(
 
         with tracer.log("Check for NaN values in predictions"):
             if prediction_slice.isnull().values.any():
-                raise ParticipantVisibleError("Predictions contain NaN values, which are not allowed.")
+                raise ParticipantVisibleError(f"Found NaN values for target `{target_name}`")
 
         with tracer.log("Check that all genes are present in predictions"):
-            missing = set(prediction_slice['gene']) - gene_names
+            difference = crunch.custom.utils.delta_message(
+                gene_names,
+                set(prediction_slice['gene']),
+            )
 
-            if missing:
-                raise ParticipantVisibleError(f"The following genes are missing in predictions: {', '.join(list(missing)[-10:])}.")
+            if difference:
+                raise ParticipantVisibleError(f"Gene names do not match for target `{target_name}`: {difference}")
 
         with tracer.log("Check that all cell IDs are present in predictions"):
-            missing = set(prediction_slice['cell_id']) - cell_ids
+            difference = crunch.custom.utils.delta_message(
+                cell_ids,
+                set(prediction_slice['cell_id']),
+            )
 
-            if missing:
-                raise ParticipantVisibleError(f"The following cell IDs are missing in predictions: {', '.join(list(map(str, missing))[-10:])}.")
+            if difference:
+                raise ParticipantVisibleError(f"Cell IDs do not match for target `{target_name}`: {difference}")
 
         with tracer.log("Check data types in the 'prediction' column"):
             if not pandas.api.types.is_numeric_dtype(prediction_slice['prediction']):
-                raise ParticipantVisibleError("The 'prediction' column should only contain numeric values.")
+                raise ParticipantVisibleError(f"Found non-numeric values for target `{target_name}`")
 
         with tracer.log("Ensure all prediction values are positive"):
             if (prediction_slice['prediction'] < 0).any():
-                raise ParticipantVisibleError("Prediction values should be positive.")
+                raise ParticipantVisibleError(f"Found negative values for target `{target_name}`")
 
         with tracer.log("Verify the size of predictions matches expectations"):
             expected = len(cell_ids) * len(gene_names)
             got = len(prediction_slice)
 
             if expected != got:
-                raise ParticipantVisibleError(f"Predictions should have {expected} rows but has {got}.")
+                raise ParticipantVisibleError(f"Row count for target `{target_name}` should be {expected} ({len(cell_ids)} cell ids * {len(gene_names)} gene names), but got {got}")
 
 
 def score(
