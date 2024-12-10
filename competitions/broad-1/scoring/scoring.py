@@ -36,7 +36,7 @@ def check(
         if difference:
             raise ParticipantVisibleError(f"Missing or extra samples: {', '.join(difference)}")
 
-    for target_name in tracer.log(target_names, "Checking target -> {value}"):
+    for target_name in tracer.loop(target_names, "Checking target -> {value}"):
         with tracer.log(f"Filter prediction at target -> {target_name}"):
             prediction_slice = prediction[prediction.index == target_name]
 
