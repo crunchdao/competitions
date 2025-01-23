@@ -1,0 +1,12 @@
+{
+    "title": "Cosine Similarity",
+    "authors": [
+        {
+            "name": "Alexis GASSMANN",
+            "link": "https://github.com/Tarandro"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "cosine-similarity.ipynb"
+}
