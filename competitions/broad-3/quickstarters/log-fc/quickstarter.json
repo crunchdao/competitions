@@ -1,0 +1,12 @@
+{
+    "title": "Log FC",
+    "authors": [
+        {
+            "name": "Alexis GASSMANN",
+            "link": "https://github.com/Tarandro"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "log-fc.ipynb"
+}
