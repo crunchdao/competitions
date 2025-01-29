@@ -4,6 +4,7 @@ import typing
 import crunch
 import crunch.custom
 import crunch.utils
+import numpy
 import pandas
 
 
@@ -59,6 +60,9 @@ def check(
         with tracer.log("Check for NaN values in predictions"):
             if prediction_slice.isnull().values.any():
                 raise ParticipantVisibleError(f"Found NaN values for target `{target_name}`")
+
+        with tracer.log("Check for infinity values in predictions"):
+            prediction_slice = prediction_slice.replace([-numpy.inf, numpy.inf], numpy.nan)
 
         with tracer.log("Check that all cell IDs are present in predictions"):
             difference = crunch.custom.utils.delta_message(

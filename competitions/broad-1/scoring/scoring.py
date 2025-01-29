@@ -60,6 +60,12 @@ def check(
             if prediction_slice.isnull().values.any():
                 raise ParticipantVisibleError(f"Found NaN values for target `{target_name}`")
 
+        with tracer.log("Check for infinity values in predictions"):
+            prediction_slice = prediction_slice.replace([-numpy.inf, numpy.inf], numpy.nan)
+
+            if prediction_slice.isnull().values.any():
+                raise ParticipantVisibleError(f"Found infinity values for target `{target_name}`")
+
         with tracer.log("Check that all genes are present in predictions"):
             difference = crunch.custom.utils.delta_message(
                 gene_names,
