@@ -166,14 +166,20 @@ def score(
                 with tracer.log(f"Filter y_test"):
                     region_y_test = y_test[y_test.index.isin(cell_ids)]
 
+                with tracer.log("Remove zeros values from y_test"):
+                    region_y_test = region_y_test[region_y_test.sum(axis=1) > 0]
+                    region_y_test = region_y_test.loc[:, region_y_test.sum(axis=0) > 0]
+
                 with tracer.log("Ensure the same index and column order"):
                     region_prediction = region_prediction.reindex(index=region_y_test.index, columns=region_y_test.columns)
 
                 with tracer.log(f"Calling _spearman_cell_wise"):
-                    region_spearman_cell = _spearman_cell_wise(region_y_test, region_y_test)
+                    region_spearman_cell = _spearman_cell_wise(region_prediction, region_y_test)
+                    # region_spearman_cell = _spearman_cell_wise(region_y_test, region_y_test)
 
                 with tracer.log(f"Calling _spearman_gene_wise"):
-                    region_spearman_gene = _spearman_gene_wise(region_y_test, region_y_test)
+                    region_spearman_gene = _spearman_gene_wise(region_prediction, region_y_test)
+                    # region_spearman_gene = _spearman_gene_wise(region_y_test, region_y_test)
 
                 cell_spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman_cell, False))
                 gene_spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman_gene, False))
