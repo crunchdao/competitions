@@ -166,20 +166,11 @@ def score(
                 with tracer.log(f"Filter y_test"):
                     region_y_test = y_test[y_test.index.isin(cell_ids)]
 
-                with tracer.log("Remove zeros values from y_test"):
-                    region_y_test = region_y_test[region_y_test.sum(axis=1) > 0]
-                    region_y_test = region_y_test.loc[:, region_y_test.sum(axis=0) > 0]
-
-                with tracer.log("Ensure the same index and column order"):
-                    region_prediction = region_prediction.reindex(index=region_y_test.index, columns=region_y_test.columns)
-
                 with tracer.log(f"Calling _spearman_cell_wise"):
                     region_spearman_cell = _spearman_cell_wise(region_prediction, region_y_test)
-                    # region_spearman_cell = _spearman_cell_wise(region_y_test, region_y_test)
 
                 with tracer.log(f"Calling _spearman_gene_wise"):
                     region_spearman_gene = _spearman_gene_wise(region_prediction, region_y_test)
-                    # region_spearman_gene = _spearman_gene_wise(region_y_test, region_y_test)
 
                 cell_spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman_cell, False))
                 gene_spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman_gene, False))
@@ -258,6 +249,9 @@ def _spearman_cell_wise(
     prediction: pandas.DataFrame,
     y_test: pandas.DataFrame,
 ):
+    y_test = y_test[y_test.sum(axis=1) > 0]
+    prediction = prediction.reindex(index=y_test.index, columns=y_test.columns)
+
     cell_count = len(y_test.index)
     weight_on_cells = numpy.ones(cell_count) / cell_count
 
@@ -281,6 +275,9 @@ def _spearman_gene_wise(
     prediction: pandas.DataFrame,
     y_test: pandas.DataFrame,
 ):
+    y_test = y_test.loc[:, y_test.sum(axis=0) > 0]
+    prediction = prediction.reindex(index=y_test.index, columns=y_test.columns)
+
     gene_count = len(y_test.columns)
     weight_on_genes = numpy.ones(gene_count) / gene_count
 
