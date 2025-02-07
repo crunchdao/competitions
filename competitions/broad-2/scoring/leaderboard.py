@@ -30,7 +30,15 @@ def rank(
         + scipy.stats.rankdata(-dataframe[gene_spearman_column_name])
     )
 
-    dataframe.sort_values(by='final_score', inplace=True)
+    dataframe.sort_values(
+        by=[
+            'final_score',
+            'project_id',  # fallback if same `final_score`
+        ],
+        inplace=True
+    )
+
+    print(dataframe)
 
     return list(map(int, dataframe["project_id"]))
 
