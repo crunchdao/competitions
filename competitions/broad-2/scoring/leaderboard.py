@@ -10,8 +10,8 @@ def rank(
     target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
     projects: typing.List[crunch.custom.RankableProject],
 ):
-    _, cell_spearman_metric = _find_metric_by_name(target_and_metrics, "ALL", "cell-spearman")
-    _, gene_spearman_metric = _find_metric_by_name(target_and_metrics, "ALL", "gene-spearman")
+    cell_spearman_metric = _find_metric_by_name(target_and_metrics, "ALL", "cell-spearman")
+    gene_spearman_metric = _find_metric_by_name(target_and_metrics, "ALL", "gene-spearman")
 
     cell_spearman_column_name = f"metric:{cell_spearman_metric.name}"
     gene_spearman_column_name = f"metric:{gene_spearman_metric.name}"
@@ -54,6 +54,6 @@ def _find_metric_by_name(
             if metric.name != metric_name:
                 continue
 
-            return target, metric
+            return metric
 
-    return None, None
+    raise ValueError(f"no metric found with name=`{metric_name}` from target with name=`{target_name}`")
