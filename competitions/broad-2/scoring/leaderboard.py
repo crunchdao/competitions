@@ -38,9 +38,7 @@ def rank(
         inplace=True
     )
 
-    print(dataframe)
-
-    return list(map(int, dataframe["project_id"]))
+    return dataframe["project_id"].astype(int).tolist()
 
 
 def _find_metric_by_name(
