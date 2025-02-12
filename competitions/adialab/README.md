@@ -1,4 +1,4 @@
-![Cover](./assets/cover.png)
+![Banner](./assets/banner.webp)
 
 # ADIA Lab Market Prediction Competition Notebooks
 

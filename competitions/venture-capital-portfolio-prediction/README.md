@@ -1,4 +1,4 @@
-![Cover](assets/cover.png)
+![Banner](./assets/banner.webp)
 
 # Venture Capital Portfolio Prediction Rally
 

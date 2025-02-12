@@ -1,3 +1,5 @@
+![Banner](./assets/banner.webp)
+
 # About CrunchDAO
 
 CrunchDAO serves as a secure intermediary, enabling data-scientists to keep control of their models while powering financial institutions.

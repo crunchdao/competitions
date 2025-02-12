@@ -1,4 +1,4 @@
-![Cover](./assets/cover.png)
+![Banner](./assets/banner.webp)
 
 # Autoimmune Disease Machine Learning Challenge #1
 

@@ -1,4 +1,4 @@
-![Cover](./assets/cover.png)
+![Banner](./assets/banner.webp)
 
 # Autoimmune Disease Machine Learning Challenge #3
 
@@ -8,5 +8,5 @@ Crunch Lab, The Eric and Wendy Schmidt Center, and The Klarman Cell Observatory 
 
 - [Overview](https://hub.crunchdao.com/competitions/broad-3)
 - [Rules](https://hub.crunchdao.com/competitions/broad-3/rules)
-- [Documentation](https://docs.crunchdao.com/competitions/competitions/broad-institute-autoimmune-disease)
-- [Discussion](https://forum.crunchdao.com/c/competition/broad-3/19)
+- [Documentation](https://docs.crunchdao.com/competitions/competitions/broad-institute-autoimmune-disease/crunch-3)
+- [Discussion](https://forum.crunchdao.com/c/competition/broad-2/18)
