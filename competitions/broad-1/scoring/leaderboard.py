@@ -28,7 +28,7 @@ def compare(
         right = predictions[right_id]
 
         with tracer.log("Computing correlation"):
-            value = left["prediction"].corr(right["prediction"])
+            value = left["prediction"].corr(right["prediction"], method="spearman")
 
         print(f"similarity - left_id={left_id} right_id={right_id} value={value}")
         similarities.append(crunch.custom.ComparedSimilarity(
