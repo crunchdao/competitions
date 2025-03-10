@@ -2,6 +2,7 @@ import typing
 
 import crunch
 import crunch.custom
+import numpy
 import pandas
 import scipy.stats
 
@@ -19,26 +20,45 @@ def rank(
     dataframe = pandas.DataFrame((
         {
             "project_id": project.id,
+            "rewardable": project.rewardable,
             cell_spearman_column_name: project.get_metric(cell_spearman_metric.id).score,
             gene_spearman_column_name: project.get_metric(gene_spearman_metric.id).score,
         }
         for project in projects
     ))
 
-    dataframe["final_score"] = scipy.stats.rankdata(
-        scipy.stats.rankdata(-dataframe[cell_spearman_column_name])
-        + scipy.stats.rankdata(-dataframe[gene_spearman_column_name])
+    dataframe["rank_all"] = _rankdata(
+        _rankdata(-dataframe[cell_spearman_column_name]) +
+        _rankdata(-dataframe[gene_spearman_column_name])
     )
 
     dataframe.sort_values(
         by=[
-            'final_score',
+            'rank_all',
             'project_id',  # fallback if same `final_score`
         ],
-        inplace=True
+        inplace=True,
     )
 
-    return dataframe["project_id"].astype(int).tolist()
+    mask = dataframe["rewardable"]
+    dataframe.loc[mask, "rank_final"] = _rankdata(dataframe.loc[mask, "rank_all"])
+
+    print(dataframe)
+
+    dataframe.index = range(1, len(dataframe.index) + 1)
+
+    return [
+        crunch.custom.RankedProject(
+            id=int(row["project_id"]),
+            rank=index,
+            reward_rank=None if numpy.isnan(row["rank_final"]) else row["rank_final"],
+        )
+        for index, row in dataframe.iterrows()
+    ]
+
+
+def _rankdata(array: typing.List[typing.Tuple[int, float]]):
+    return scipy.stats.rankdata(array, method="min")
 
 
 def _find_metric_by_name(
