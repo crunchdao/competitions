@@ -43,8 +43,6 @@ def rank(
     mask = dataframe["rewardable"]
     dataframe.loc[mask, "rank_final"] = _rankdata(dataframe.loc[mask, "rank_all"])
 
-    print(dataframe)
-
     dataframe.index = range(1, len(dataframe.index) + 1)
 
     return [
