@@ -122,7 +122,7 @@ def cli(
         if not _validate_directories(schema, competition_name_root, items, props):
             success = False
 
-    for competition_format in ["TIMESERIES", "DAG", "STREAM"]:
+    for competition_format in ["TIMESERIES", "DAG", "STREAM", "SPACIAL", "UNSTRUCTURED"]:
         competition_format_root = os.path.join(generic_root, competition_format.lower())
         if not os.path.isdir(competition_format_root):
             continue
