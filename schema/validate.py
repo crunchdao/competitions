@@ -38,6 +38,10 @@ def _validate(
         parent = os.path.dirname(path)
         missing = []
         for file in files:
+            if file.startswith("https://github.com/"):
+                # do not check external files
+                continue
+
             file_path = os.path.join(parent, file)
             if not os.path.exists(file_path):
                 missing.append(file_path)
