@@ -1,0 +1,12 @@
+{
+    "title": "EWMA Variance",
+    "authors": [
+        {
+            "name": "Alexis GASSMANN",
+            "link": "https://github.com/Tarandro"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "https://github.com/microprediction/birdgame/blob/main/birdgame/examples/quickstarters/ewma_var.ipynb"
+}
