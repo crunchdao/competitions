@@ -29,6 +29,8 @@ def compare(
         for target in targets
     }
 
+    breakpoint()
+
     predictions_by_sample: typing.Dict[int, typing.Dict[str, pandas.DataFrame]] = {}
 
     for prediction_id, dataframe in tracer.loop(list(predictions.items()), lambda entry: f"Preparing Prediction #{entry[0]}"):
