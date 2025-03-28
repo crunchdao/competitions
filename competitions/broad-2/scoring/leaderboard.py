@@ -19,15 +19,15 @@ def compare(
     all_target = _find_target_by_name(targets, "ALL")
     targets = [target for target in targets if target is not all_target]
 
-    # gene_names_per_sample = {
-    #     target.name: set(
-    #         pandas.read_csv(
-    #             os.path.join(data_directory_path, f"validation-{target.name}.csv"),
-    #             index_col="cell_id"
-    #         ).columns
-    #     )
-    #     for target in targets
-    # }
+    gene_names_per_sample = {
+        target.name: set(
+            pandas.read_csv(
+                os.path.join(data_directory_path, f"validation-{target.name}.csv"),
+                index_col="cell_id"
+            ).columns
+        )
+        for target in targets
+    }
 
     predictions_by_sample: typing.Dict[int, typing.Dict[str, pandas.DataFrame]] = {}
 
@@ -36,15 +36,25 @@ def compare(
 
         for sample_name, group in tracer.loop(dataframe.groupby("sample"), lambda entry: f"Grouped by {entry[0]}"):
             with tracer.log("Dropping unused gene columns"):
-                # useless_columns = set(group.columns) - gene_names_per_sample[sample_name]
-                useless_columns = {"sample"}
+                useless_columns = set(group.columns) - gene_names_per_sample[sample_name]
 
                 group.drop(columns=useless_columns, inplace=True)
+
+            with tracer.log("Melting the dataframe"):
+                group = group.melt(
+                    var_name="gene",
+                    value_name="prediction",
+                    ignore_index=False,
+                )
+
+            with tracer.log("Setting the index"):
+                group.index.name = "cell_id"
+                group.set_index([group.index, "gene"], inplace=True)
 
             with tracer.log("Sorting the index"):
                 group.sort_index(inplace=True)
 
-            prediction_by_sample[sample_name] = group
+            prediction_by_sample[sample_name] = group["prediction"]
 
         predictions_by_sample[prediction_id] = prediction_by_sample
         del predictions[prediction_id]
@@ -56,19 +66,10 @@ def compare(
 
         values = []
         for target in tracer.loop(targets, lambda target: f"Correlating {target.name}"):
-            if target is all_target:
+            if target.virtual:
                 continue
 
-            values2 = []
-            # for gene_name in tracer.loop(gene_names_per_sample[target.name], lambda gene_name: f"Correlating gene {gene_name}"):
-            for gene_name in tracer.loop(left_prediction_by_sample[target.name].columns, lambda gene_name: f"Correlating gene {gene_name}"):
-                left = left_prediction_by_sample[target.name][gene_name]
-                right = right_prediction_by_sample[target.name][gene_name]
-
-                value2 = left.corr(right, method="spearman")
-                values2.append(value2)
-
-            value = numpy.nanmean(values2)
+            value = left_prediction_by_sample[target.name].corr(right_prediction_by_sample[target.name], method="spearman")
             values.append(value)
 
         value = numpy.nanmean(values)
