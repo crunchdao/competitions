@@ -5,6 +5,7 @@ import crunch
 import crunch.custom
 import numpy
 import pandas
+import glob
 import scipy.stats
 
 tracer = crunch.utils.Tracer()
@@ -17,16 +18,22 @@ def compare(
     data_directory_path: str,
 ):
     all_target = _find_target_by_name(targets, "ALL")
-    targets = [target for target in targets if target is not all_target]
+
+    # Avoid hardcoding sample names
+    validation_file_path_prefix = os.path.join(data_directory_path, "validation-")
+    sample_name_to_path = {
+        file_path[len(validation_file_path_prefix):-4]: file_path
+        for file_path in glob.glob(f"{validation_file_path_prefix}*.csv")
+    }
 
     gene_names_per_sample = {
-        target.name: set(
+        sample_name: set(
             pandas.read_csv(
-                os.path.join(data_directory_path, f"validation-{target.name}.csv"),
+                file_path,
                 index_col="cell_id"
             ).columns
         )
-        for target in targets
+        for sample_name, file_path in sample_name_to_path.items()
     }
 
     breakpoint()
