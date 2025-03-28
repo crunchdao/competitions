@@ -36,8 +36,6 @@ def compare(
         for sample_name, file_path in sample_name_to_path.items()
     }
 
-    breakpoint()
-
     predictions_by_sample: typing.Dict[int, typing.Dict[str, pandas.DataFrame]] = {}
 
     for prediction_id, dataframe in tracer.loop(list(predictions.items()), lambda entry: f"Preparing Prediction #{entry[0]}"):
