@@ -26,6 +26,8 @@ def compare(
         for file_path in glob.glob(f"{validation_file_path_prefix}*.csv")
     }
 
+    print(f"found samples - names={list(sample_name_to_path.keys())}")
+
     gene_names_per_sample = {
         sample_name: set(
             pandas.read_csv(
