@@ -116,6 +116,7 @@ def rank(
     dataframe = pandas.DataFrame((
         {
             "project_id": project.id,
+            "group": project.group,
             "rewardable": project.rewardable,
             cell_spearman_column_name: project.get_metric(cell_spearman_metric.id).score,
             gene_spearman_column_name: project.get_metric(gene_spearman_metric.id).score,
@@ -136,7 +137,10 @@ def rank(
         inplace=True,
     )
 
-    mask = dataframe["rewardable"]
+    # mask = dataframe["rewardable"]
+    # dataframe.loc[mask, "rank_rewardable"] = _rankdata(dataframe.loc[mask, "rank_all"])
+
+    mask = dataframe["rewardable"] & ~dataframe["group"].duplicated(keep="first")
     dataframe.loc[mask, "rank_final"] = _rankdata(dataframe.loc[mask, "rank_all"])
 
     dataframe.index = range(1, len(dataframe.index) + 1)
