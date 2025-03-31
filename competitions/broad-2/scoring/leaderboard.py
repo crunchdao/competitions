@@ -26,6 +26,9 @@ def compare(
         for file_path in glob.glob(f"{validation_file_path_prefix}*.csv")
     }
 
+    sample_names = list(sample_name_to_path.keys())
+    print(f"found samples - names={sample_names}")
+
     gene_names_per_sample = {
         sample_name: set(
             pandas.read_csv(
@@ -72,11 +75,8 @@ def compare(
         right_prediction_by_sample = predictions_by_sample[right_id]
 
         values = []
-        for target in tracer.loop(targets, lambda target: f"Correlating {target.name}"):
-            if target.virtual:
-                continue
-
-            value = left_prediction_by_sample[target.name].corr(right_prediction_by_sample[target.name], method="spearman")
+        for sample_name in tracer.loop(sample_names, lambda name: f"Correlating {name}"):
+            value = left_prediction_by_sample[sample_name].corr(right_prediction_by_sample[sample_name], method="spearman")
             values.append(value)
 
         value = numpy.nanmean(values)
