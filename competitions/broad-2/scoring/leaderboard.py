@@ -79,7 +79,6 @@ def compare(
             value = left_prediction_by_sample[sample_name].corr(right_prediction_by_sample[sample_name], method="spearman")
             values.append(value)
 
-        print(f"debug - left_id={left_id} right_id={right_id} values={values}")
         value = numpy.nanmean(values)
 
         print(f"similarity - left_id={left_id} right_id={right_id} value={value}")
