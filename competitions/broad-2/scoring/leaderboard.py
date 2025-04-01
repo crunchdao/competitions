@@ -106,6 +106,7 @@ def _find_target_by_name(
 def rank(
     target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
     projects: typing.List[crunch.custom.RankableProject],
+    rank_pass: crunch.custom.RankPass
 ):
     cell_spearman_metric = _find_metric_by_name(target_and_metrics, "ALL", "cell-spearman")
     gene_spearman_metric = _find_metric_by_name(target_and_metrics, "ALL", "gene-spearman")
@@ -137,13 +138,20 @@ def rank(
         inplace=True,
     )
 
-    # mask = dataframe["rewardable"]
-    # dataframe.loc[mask, "rank_rewardable"] = _rankdata(dataframe.loc[mask, "rank_all"])
-
-    mask = dataframe["rewardable"] & ~dataframe["group"].duplicated(keep="first")
-    dataframe.loc[mask, "rank_final"] = _rankdata(dataframe.loc[mask, "rank_all"])
-
     dataframe.index = range(1, len(dataframe.index) + 1)
+
+    if rank_pass == crunch.custom.RankPass.PRE_DUPLICATE:
+        dataframe["rank_final"] = numpy.nan
+
+    elif rank_pass == crunch.custom.RankPass.FINAL:
+        # mask = dataframe["rewardable"]
+        # dataframe.loc[mask, "rank_rewardable"] = _rankdata(dataframe.loc[mask, "rank_all"])
+
+        mask = dataframe["rewardable"] & ~dataframe["group"].duplicated(keep="first")
+        dataframe.loc[mask, "rank_final"] = _rankdata(dataframe.loc[mask, "rank_all"])
+
+    else:
+        raise ValueError(f"unknown rank pass: {rank_pass}")
 
     return [
         crunch.custom.RankedProject(
