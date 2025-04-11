@@ -1,0 +1,108 @@
+import os
+import typing
+
+import pandas
+from crunch.container import GeneratorWrapper
+from crunch.utils import smart_call
+
+if typing.TYPE_CHECKING:
+    from crunch.runner.custom import (RunnerContext, RunnerExecutorContext,
+                                      UserModule)
+
+
+def load_data(
+    data_directory_path: str,
+):
+    x_train = pandas.read_parquet(os.path.join(data_directory_path, "X_train.parquet"))
+    y_train = pandas.read_parquet(os.path.join(data_directory_path, "y_train.parquet"))["structural_breakpoint"]
+    x_test = pandas.read_parquet(os.path.join(data_directory_path, "X_test.parquet"))
+
+    return x_train, y_train, x_test
+
+
+def run(
+    context: "RunnerContext",
+):
+    context.execute(
+        command="train",
+    )
+
+    prediction = context.execute(
+        command="infer",
+        return_prediction=True,
+    )
+
+    return prediction
+
+
+def execute(
+    context: "RunnerExecutorContext",
+    module: "UserModule",
+    data_directory_path: str,
+    model_directory_path: str,
+):
+    default_values = {
+        "data_directory_path": data_directory_path,
+        "model_directory_path": model_directory_path,
+    }
+
+    def train():
+        x_train = pandas.read_parquet(os.path.join(data_directory_path, "X_train.parquet"))
+        y_train = pandas.read_parquet(os.path.join(data_directory_path, "y_train.parquet"))["structural_breakpoint"]
+
+        context.trip_data_fuse()
+
+        train_function = module.get_function("train")
+
+        smart_call(
+            train_function,
+            default_values,
+            {
+                "x_train": x_train,
+                "X_train": x_train,
+                "y_train": y_train,
+            }
+        )
+
+    def infer():
+        x_test = pandas.read_parquet(os.path.join(data_directory_path, "X_test.parquet"))
+
+        datasets, dataset_ids = [], []
+        for id, dataset in x_test.groupby(x_test.index.get_level_values("id")):
+            dataset.name = id
+
+            datasets.append(dataset)
+            dataset_ids.append(id)
+
+        del x_test
+
+        context.trip_data_fuse()
+
+        infer_function = module.get_function("infer")
+
+        wrapper = GeneratorWrapper(
+            iter(datasets),
+            lambda datasets: smart_call(
+                infer_function,
+                default_values,
+                {
+                    "datasets": datasets,
+                    "X_test": datasets,
+                    "x_test": datasets,
+                }
+            )
+        )
+
+        collected_values, _ = wrapper.collect(len(datasets))
+        prediction = pandas.DataFrame(
+            collected_values,
+            columns=["prediction"],
+            index=pandas.Index(dataset_ids, name="id")
+        )
+
+        return prediction
+
+    return {
+        "train": train,
+        "infer": infer,
+    }
