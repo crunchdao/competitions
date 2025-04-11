@@ -15,7 +15,7 @@ def load_data(
 ):
     x_train = pandas.read_parquet(os.path.join(data_directory_path, "X_train.parquet"))
     y_train = pandas.read_parquet(os.path.join(data_directory_path, "y_train.parquet"))["structural_breakpoint"]
-    x_test = pandas.read_parquet(os.path.join(data_directory_path, "X_test.parquet"))
+    x_test = pandas.read_parquet(os.path.join(data_directory_path, "X_test.reduced.parquet"))
 
     return x_train, y_train, x_test
 
@@ -65,7 +65,8 @@ def execute(
         )
 
     def infer():
-        x_test = pandas.read_parquet(os.path.join(data_directory_path, "X_test.parquet"))
+        x_test_name = "X_test.reduced.parquet" if context.is_local else "X_test.parquet"
+        x_test = pandas.read_parquet(os.path.join(data_directory_path, x_test_name))
 
         datasets, dataset_ids = [], []
         for id, dataset in x_test.groupby(x_test.index.get_level_values("id")):
