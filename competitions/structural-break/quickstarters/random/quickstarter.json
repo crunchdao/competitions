@@ -1,0 +1,12 @@
+{
+    "title": "Random Submission",
+    "authors": [
+        {
+            "name": "Enzo CACERES",
+            "link": "https://github.com/Caceresenzo"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "random-submission.ipynb"
+}
