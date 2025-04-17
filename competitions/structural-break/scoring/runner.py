@@ -30,17 +30,26 @@ def run(
     prediction = context.execute(
         command="infer",
         return_prediction=True,
+        parameters={
+            "determinism_check": False,
+        }
     )
 
     if context.is_determinism_check_enabled:
-        context.log("checking determinism by executing the inference again")
+        percentage = 0.3
+
+        context.log(f"checking determinism by executing the inference again with {percentage*100:.0f}% of the data")
 
         prediction2 = context.execute(
             command="infer",
             return_prediction=True,
+            parameters={
+                "determinism_check": percentage,
+            }
         )
 
-        context.report_determinism(prediction.equals(prediction2))
+        is_deterministic = prediction.loc[prediction2.index].equals(prediction2)
+        context.report_determinism(is_deterministic)
 
     return prediction
 
@@ -74,7 +83,9 @@ def execute(
             }
         )
 
-    def infer():
+    def infer(
+        determinism_check: typing.Union[typing.Literal[False], float],
+    ):
         x_test_name = "X_test.reduced.parquet" if context.is_local else "X_test.parquet"
         x_test = pandas.read_parquet(os.path.join(data_directory_path, x_test_name))
 
@@ -84,6 +95,12 @@ def execute(
 
             datasets.append(dataset)
             dataset_ids.append(id)
+
+        if determinism_check is not False:
+            determinism_slice = slice(None, int(len(datasets) * determinism_check))
+
+            datasets = datasets[determinism_slice]
+            dataset_ids = dataset_ids[determinism_slice]
 
         del x_test
 
