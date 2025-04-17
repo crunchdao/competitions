@@ -7,8 +7,8 @@ from crunch.container import GeneratorWrapper
 from crunch.utils import smart_call
 
 if typing.TYPE_CHECKING:
-    from crunch.runner.custom import (RunnerContext, RunnerExecutorContext,
-                                      UserModule)
+    from crunch.runner.unstructured import (RunnerContext,
+                                            RunnerExecutorContext, UserModule)
 
 
 def load_data(
@@ -31,6 +31,16 @@ def run(
         command="infer",
         return_prediction=True,
     )
+
+    if context.is_determinism_check_enabled:
+        context.log("checking determinism by executing the inference again")
+
+        prediction2 = context.execute(
+            command="infer",
+            return_prediction=True,
+        )
+
+        context.report_determinism(prediction.equals(prediction2))
 
     return prediction
 
