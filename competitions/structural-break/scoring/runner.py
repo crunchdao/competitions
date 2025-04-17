@@ -1,6 +1,7 @@
 import os
 import typing
 
+import numpy
 import pandas
 from crunch.container import GeneratorWrapper
 from crunch.utils import smart_call
@@ -90,7 +91,8 @@ def execute(
                     "X_test": datasets,
                     "x_test": datasets,
                 }
-            )
+            ),
+            post_processor=_post_process_infer_yield_result,
         )
 
         collected_values, _ = wrapper.collect(len(datasets))
@@ -129,3 +131,31 @@ def _load_x_test(data_directory_path: str, reduced: bool):
     del x_test
 
     return datasets, dataset_ids
+
+
+def _post_process_infer_yield_result(result: typing.Any) -> typing.Any:
+    if isinstance(result, pandas.Series):
+        if len(result) != 1:
+            raise ValueError(f"a `pandas.Series` is only allowed if it has a single value, but got a length of {len(result)}")
+
+        result = next(iter(result))
+
+    elif isinstance(result, numpy.ndarray):
+        if result.shape != (1,):
+            raise ValueError(f"a `numpy.ndarray` is only allowed if it has a single dimension and a single value, but got a shape of {result.shape}")
+
+        result = result[0]
+
+    elif isinstance(result, list):
+        if len(result) != 1:
+            raise ValueError(f"a `list` is only allowed if it has a single value, but got a length of {len(result)}")
+
+        result = result[0]
+
+    if all(not numpy.issubdtype(type(result), dtype) for dtype in [numpy.floating, numpy.integer, numpy.bool_]):
+        raise ValueError(f"value must be a float or an int or a bool, but got {type(result)}")
+
+    else:
+        result = float(result)
+
+    return result
