@@ -31,11 +31,11 @@ def check(
             raise ParticipantVisibleError(f"Columns do not match: {difference}")
 
     with tracer.log("Check for dtypes"):
-        if prediction.dtypes["prediction"] != numpy.dtype("bool"):
-            raise ParticipantVisibleError("Column 'prediction' must be of type bool")
+        if not numpy.issubdtype(prediction.dtypes["prediction"], numpy.floating):
+            raise ParticipantVisibleError("Column 'prediction' must be of type float")
 
-        if prediction.index.dtype != numpy.dtype("int64"):
-            raise ParticipantVisibleError("Index must be of type int64")
+        if not numpy.issubdtype(prediction.index.dtype, numpy.integer):
+            raise ParticipantVisibleError("Index must be of type int")
 
     with tracer.log("Check for nan and inf"):
         if prediction["prediction"].isna().any():
@@ -71,6 +71,9 @@ def score(
 
     with tracer.log("Reindex prediction"):
         prediction = prediction.reindex(y_test.index, copy=False)
+
+        if prediction["prediction"].isna().any():
+            raise ParticipantVisibleError("Reindex resulted in NaN values")
 
     with tracer.log("Call roc_auc_score"):
         value = sklearn.metrics.roc_auc_score(
