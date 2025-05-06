@@ -1,0 +1,11 @@
+{
+    "title": "Baseline",
+    "authors": [
+        {
+            "name": "ADIA Lab"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "baseline.ipynb"
+}
