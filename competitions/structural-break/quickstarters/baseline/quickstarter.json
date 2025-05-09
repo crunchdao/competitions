@@ -1,5 +1,6 @@
 {
     "title": "Baseline",
+    "description": "Uses a t-test to compare the distributions before and after the boundary point.",
     "authors": [
         {
             "name": "ADIA Lab"
