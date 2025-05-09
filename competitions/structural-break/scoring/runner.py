@@ -23,9 +23,10 @@ def load_data(
 def run(
     context: "RunnerContext",
 ):
-    context.execute(
-        command="train",
-    )
+    if context.force_first_train:
+        context.execute(
+            command="train",
+        )
 
     prediction = context.execute(
         command="infer",
