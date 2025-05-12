@@ -1,0 +1,13 @@
+{
+    "title": "Random Submission",
+    "description": "Generates random predictions (inherently non-deterministic).\nUseful only as a template to know the required format.",
+    "authors": [
+        {
+            "name": "Enzo CACERES",
+            "link": "https://github.com/Caceresenzo"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "random-submission.ipynb"
+}
