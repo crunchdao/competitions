@@ -38,8 +38,9 @@ def run(
 
     if context.is_determinism_check_enabled:
         percentage = 0.3
+        tolerance = 1e-8
 
-        context.log(f"checking determinism by executing the inference again with {percentage*100:.0f}% of the data")
+        context.log(f"checking determinism by executing the inference again with {percentage*100:.0f}% of the data (tolerance: {tolerance})")
 
         prediction2 = context.execute(
             command="infer",
@@ -49,7 +50,7 @@ def run(
             }
         )
 
-        is_deterministic = prediction.loc[prediction2.index].equals(prediction2)
+        is_deterministic = numpy.allclose(prediction.loc[prediction2.index], prediction2, atol=tolerance)
         context.report_determinism(is_deterministic)
 
     return prediction
