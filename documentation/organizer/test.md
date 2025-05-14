@@ -313,7 +313,7 @@ def check(
         (extends) BaseException: If the file is invalid, but the reason will be hidden to avoid leaks.
     """
 
-	pass
+    pass
 ```
 
 <details>
