@@ -80,12 +80,12 @@ def compare(
 ) -> list[ComparedSimilarity]:
     """
     Parameters:
-		targets: List of targets for comparing columns.
-		predictions: Mapping from a prediction's id to its dataframe.
-		combinations: List of ids to be compared with each other (left and right).
+        targets: List of targets for comparing columns.
+        predictions: Mapping from a prediction's id to its dataframe.
+        combinations: List of ids to be compared with each other (left and right).
     
     Return:
-		Compared similarities of every combination in `combinations`.
+        Compared similarities of every combination in `combinations`.
     """
     
     # TODO Do as needed
@@ -129,25 +129,25 @@ The score file must use the following schema:
 
 ```typescript
 type ProjectEntry = {
-	/** Project ID. */
-	id: number; 
+    /** Project ID. */
+    id: number; 
 
-	/** Current project group. Format: `(user|team)-(id)` */
-	group: string;
+    /** Current project group. Format: `(user|team)-(id)` */
+    group: string;
 
-	/* Is the project rewardable? (only if not a duplicate and deterministic and ...) */
-	rewardable: boolean;
+    /* Is the project rewardable? (only if not a duplicate and deterministic and ...) */
+    rewardable: boolean;
 
-	/* Scored metrics. */
-	metrics: Array<MetricValue>;
+    /* Scored metrics. */
+    metrics: Array<MetricValue>;
 }
 
 type MetricValue = {
-	/** Metric ID. */
-	id: number;
+    /** Metric ID. */
+    id: number;
 
-	/** Scored value. */
-	score: number;
+    /** Scored value. */
+    score: number;
 }
 
 type Root = Array<ProjectEntry>;
@@ -169,17 +169,17 @@ def rank(
 ) -> list[RankedProject]:
     """
     Parameters:
-		target_and_metrics: List of targets and metrics that can be used for ranking.
-		projects: List of projects to rank.
-		rank_pass: Current ranking pass.
+        target_and_metrics: List of targets and metrics that can be used for ranking.
+        projects: List of projects to rank.
+        rank_pass: Current ranking pass.
     
     Return:
-		The ranked projects.
+        The ranked projects.
     """
 
     # TODO Do as needed
     target, metrics = target_and_metrics[0]
-	metric = metrics[0]
+    metric = metrics[0]
 
     metric_column_name = f"metric:{metric.name}"
 
@@ -192,9 +192,9 @@ def rank(
         }
         for project in projects
     ))
-	
-	def _rankdata(array: list[tuple[int, float]]):
-		return scipy.stats.rankdata(array, method="min")
+    
+    def _rankdata(array: list[tuple[int, float]]):
+        return scipy.stats.rankdata(array, method="min")
 
     dataframe["rank"] = _rankdata(dataframe[metric_column_name])
 
@@ -208,9 +208,9 @@ def rank(
 
     dataframe.index = range(1, len(dataframe.index) + 1)
 
-	# ignore non rewardable, and only keep first from each group
-	mask = dataframe["rewardable"] & ~dataframe["group"].duplicated(keep="first")
-	dataframe.loc[mask, "rank"] = numpy.nan
+    # ignore non rewardable, and only keep first from each group
+    mask = dataframe["rewardable"] & ~dataframe["group"].duplicated(keep="first")
+    dataframe.loc[mask, "rank"] = numpy.nan
 
     return [
         RankedProject(
@@ -259,36 +259,36 @@ def check(
 ) -> None:
     """
     Parameters:
-		prediction: The dataframe to check.
-		data_directory_path: Directory containing the data.
-		target_names: List of the name of the targets.
-		phase_type: Current phase type.
+        prediction: The dataframe to check.
+        data_directory_path: Directory containing the data.
+        target_names: List of the name of the targets.
+        phase_type: Current phase type.
 
     Return:
-		None.
+        None.
 
-	Raises:
-		ParticipantVisibleError: If the file is invalid for a given reason.
-		(extends) BaseException: If the file is invalid, but the reason will be hidden to avoid leaks.
+    Raises:
+        ParticipantVisibleError: If the file is invalid for a given reason.
+        (extends) BaseException: If the file is invalid, but the reason will be hidden to avoid leaks.
     """
 
-	if True:
-		difference = crunch.custom.utils.delta_message(
-			target_names,
-			set(prediction.columns),
-		)
+    if True:
+        difference = crunch.custom.utils.delta_message(
+            target_names,
+            set(prediction.columns),
+        )
 
-		if difference:
-			raise ParticipantVisibleError(f"Columns do not match: {difference}")
+        if difference:
+            raise ParticipantVisibleError(f"Columns do not match: {difference}")
 
-	if True:
-		# TODO Add more checks
-		# Ideas:
-		# - column names
-		# - column dtypes
-		# - row count
+    if True:
+        # TODO Add more checks
+        # Ideas:
+        # - column names
+        # - column dtypes
+        # - row count
 
-		pass
+        pass
 ```
 
 ## Score Function
@@ -320,27 +320,27 @@ def score(
 ) -> dict[int, ScoredMetric]:
     """
     Parameters:
-		prediction: The dataframe to score.
-		data_directory_path: Directory containing the data.
-		phase_type: Current phase type.
-		target_and_metrics: List of targets and metrics.
+        prediction: The dataframe to score.
+        data_directory_path: Directory containing the data.
+        phase_type: Current phase type.
+        target_and_metrics: List of targets and metrics.
 
     Return:
-		A mapping from a metric id to a scored metric.
+        A mapping from a metric id to a scored metric.
     """
 
     # TODO Do as needed
     target, metrics = target_and_metrics[0]
-	metric = metrics[0]
+    metric = metrics[0]
 
-	y_test_path = os.path.join(data_directory_path, "y_test.parquet")
-	y_test = pandas.read_parquet(y_test_path)
+    y_test_path = os.path.join(data_directory_path, "y_test.parquet")
+    y_test = pandas.read_parquet(y_test_path)
 
-	score = prediction["prediction"].corr(y_test["target"])
+    score = prediction["prediction"].corr(y_test["target"])
 
-	return {
-		metric.id: ScoredMetric(score)
-	}
+    return {
+        metric.id: ScoredMetric(score)
+    }
 ```
 
 # Submission Module
@@ -378,23 +378,23 @@ def check(
 ) -> None:
     """
     Parameters:
-		submission_files: File of the submissions.
-		model_files: File of the resources directory. (empty if none)
+        submission_files: File of the submissions.
+        model_files: File of the resources directory. (empty if none)
 
     Return:
-		None.
+        None.
 
-	Raises:
-		ParticipantVisibleError: If the submission is invalid for a given reason.
+    Raises:
+        ParticipantVisibleError: If the submission is invalid for a given reason.
     """
 
-	report_md_file = _find_file_by_path(submission_files, "REPORT.md")
-	if report_md_file is None:
-		raise ParticipantVisibleError(f"Missing `{report_md_file_path}` file.")
+    report_md_file = _find_file_by_path(submission_files, "REPORT.md")
+    if report_md_file is None:
+        raise ParticipantVisibleError(f"Missing `{report_md_file_path}` file.")
 
-	content = report_md_file.text
-	if "<!-- Don't forget to change me -->" in content:
-		raise ParticipantVisibleError(f"Default comment found in `{report_md_file_path}`. Has it been edited?")
+    content = report_md_file.text
+    if "<!-- Don't forget to change me -->" in content:
+        raise ParticipantVisibleError(f"Default comment found in `{report_md_file_path}`. Has it been edited?")
 
 
 def _find_file_by_path(files: list[File], path: str) -> File | None:
