@@ -83,11 +83,29 @@ def compare(
         targets: List of targets for comparing columns.
         predictions: Mapping from a prediction's id to its dataframe.
         combinations: List of ids to be compared with each other (left and right).
-    
+
     Return:
         Compared similarities of every combination in `combinations`.
     """
-    
+
+    return []
+```
+
+<details>
+
+<summary>Example Implementation</summary>
+
+```python
+from crunch.api import Target
+from crunch.unstructured import ComparedSimilarity
+
+import pandas
+
+def compare(
+    targets: list[Target],
+    predictions: dict[int, pandas.DataFrame],
+    combinations: list[tuple[int, int]],
+) -> list[ComparedSimilarity]:
     # TODO Do as needed
     target = targets[0]
 
@@ -107,6 +125,8 @@ def compare(
 
     return similarities
 ```
+
+</details>
 
 ## Rank Function
 
@@ -128,7 +148,7 @@ crunch organizer <competition name> test leaderboard rank \
 The score file must use the following schema:
 
 ```typescript
-type ProjectEntry = {
+type RankableProject = {
     /** Project ID. */
     id: number; 
 
@@ -139,10 +159,10 @@ type ProjectEntry = {
     rewardable: boolean;
 
     /* Scored metrics. */
-    metrics: Array<MetricValue>;
+    metrics: Array<RankableProjectMetric>;
 }
 
-type MetricValue = {
+type RankableProjectMetric = {
     /** Metric ID. */
     id: number;
 
@@ -150,7 +170,7 @@ type MetricValue = {
     score: number;
 }
 
-type Root = Array<ProjectEntry>;
+type Root = Array<RankableProject>;
 ```
 
 ### API
@@ -172,11 +192,30 @@ def rank(
         target_and_metrics: List of targets and metrics that can be used for ranking.
         projects: List of projects to rank.
         rank_pass: Current ranking pass.
-    
+
     Return:
         The ranked projects.
     """
 
+    return []
+```
+
+<details>
+
+<summary>Example Implementation</summary>
+
+```python
+from crunch.api import Target, Metric
+from crunch.unstructured import RankableProject, RankPass, RankedProject
+
+import numpy
+import scipy.stats
+
+def rank(
+    target_and_metrics: list[tuple[Target, list[Metric]]],
+    projects: list[RankableProject],
+    rank_pass: RankPass
+) -> list[RankedProject]:
     # TODO Do as needed
     target, metrics = target_and_metrics[0]
     metric = metrics[0]
@@ -221,6 +260,8 @@ def rank(
         for index, row in dataframe.iterrows()
     ]
 ```
+
+</details>
 
 # Scoring Module
 
@@ -272,6 +313,30 @@ def check(
         (extends) BaseException: If the file is invalid, but the reason will be hidden to avoid leaks.
     """
 
+	pass
+```
+
+<details>
+
+<summary>Example Implementation</summary>
+
+```python
+from crunch.api import PhaseType
+
+import pandas
+
+
+class ParticipantVisibleError(Exception):
+    """Custom exception for errors related to participant visibility."""
+    pass
+
+
+def check(
+    prediction: pandas.DataFrame,
+    data_directory_path: str,
+    target_names: list[str],
+    phase_type: PhaseType
+) -> None:
     if True:
         difference = crunch.custom.utils.delta_message(
             target_names,
@@ -290,6 +355,8 @@ def check(
 
         pass
 ```
+
+</details>
 
 ## Score Function
 
@@ -329,6 +396,26 @@ def score(
         A mapping from a metric id to a scored metric.
     """
 
+    return {}
+```
+
+<details>
+
+<summary>Example Implementation</summary>
+
+```python
+from crunch.api import PhaseType, Target, Metric
+from crunch.scoring import ScoredMetric
+
+import pandas
+
+
+def score(
+    prediction: pandas.DataFrame,
+    data_directory_path: str,
+    phase_type: PhaseType,
+    target_and_metrics: list[tuple[Target, list[Metric]]],
+) -> dict[int, ScoredMetric]:
     # TODO Do as needed
     target, metrics = target_and_metrics[0]
     metric = metrics[0]
@@ -342,6 +429,8 @@ def score(
         metric.id: ScoredMetric(score)
     }
 ```
+
+</details>
 
 # Submission Module
 
@@ -388,6 +477,26 @@ def check(
         ParticipantVisibleError: If the submission is invalid for a given reason.
     """
 
+    pass
+```
+
+<details>
+
+<summary>Example Implementation</summary>
+
+```python
+from crunch.unstructured import File
+
+
+class ParticipantVisibleError(Exception):
+    """Custom exception for errors related to participant visibility."""
+    pass
+
+
+def check(
+    submission_files: list[File],
+    model_files: list[File],
+) -> None:
     report_md_file = _find_file_by_path(submission_files, "REPORT.md")
     if report_md_file is None:
         raise ParticipantVisibleError(f"Missing `{report_md_file_path}` file.")
@@ -400,3 +509,5 @@ def check(
 def _find_file_by_path(files: list[File], path: str) -> File | None:
     return next((file for file in files if file.path == path ), None)
 ```
+
+</details>
