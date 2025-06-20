@@ -99,8 +99,7 @@ def check(
     pass
 ```
 
-> [!NOTE]
-> [There is an example implementation available for `broad-3`.](../../competitions/broad-3/scoring/scoring.py)
+[There is an example implementation available for `broad-3`.](../../competitions/broad-3/scoring/scoring.py)
 
 # Scoring Module
 
@@ -155,8 +154,7 @@ def check(
     pass
 ```
 
-> [!NOTE]
-> [There is an example implementation available for `structural-break`.](../../competitions/structural-break/scoring/scoring.py)
+[There is an example implementation available for `structural-break`.](../../competitions/structural-break/scoring/scoring.py)
 
 ## Score Function
 
@@ -199,8 +197,7 @@ def score(
     return {}
 ```
 
-> [!NOTE]
-> [There is an example implementation available for `structural-break`.](../../competitions/structural-break/scoring/scoring.py)
+[There is an example implementation available for `structural-break`.](../../competitions/structural-break/scoring/scoring.py)
 
 # Leaderboard Module
 
@@ -242,8 +239,7 @@ def compare(
     return []
 ```
 
-> [!NOTE]
-> [There is an example implementation available for `broad-2`.](../../competitions/broad-2/scoring/scoring.py)
+[There is an example implementation available for `broad-2`.](../../competitions/broad-2/scoring/scoring.py)
 
 ## Rank Function
 
@@ -317,5 +313,4 @@ def rank(
     return []
 ```
 
-> [!NOTE]
-> [There is an example implementation available for `broad-2`.](../../competitions/broad-2/scoring/scoring.py)
+[There is an example implementation available for `broad-2`.](../../competitions/broad-2/scoring/scoring.py)
