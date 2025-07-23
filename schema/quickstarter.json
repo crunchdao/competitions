@@ -44,6 +44,10 @@
         "entrypoint": {
             "type": "string"
         },
+        "kaggleUrl": {
+            "type": "string",
+            "format": "uri"
+        },
         "files": {
             "type": "array",
             "items": {
