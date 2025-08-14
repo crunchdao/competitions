@@ -1,0 +1,13 @@
+{
+    "title": "Baseline Submission",
+    "description": "Use the official example from the Synth Subnet repository.",
+    "authors": [
+        {
+            "name": "Enzo CACERES",
+            "link": "https://github.com/Caceresenzo"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "baseline.ipynb"
+}
