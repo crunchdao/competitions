@@ -1,0 +1,14 @@
+{
+    "title": "Unsupervised Baseline",
+    "description": "Uses Wasserstein distance across boundary, scaled with a logistic function.",
+    "authors": [
+        {
+            "name": "Saina Deshpande",
+            "link": "https://www.linkedin.com/in/saina-deshpande/"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "unsupervised-baseline.ipynb",
+    "kaggleUrl": "https://www.kaggle.com/code/crunchdao/structural-break-unsupervised-baseline"
+}
