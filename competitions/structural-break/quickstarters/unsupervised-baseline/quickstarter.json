@@ -9,5 +9,6 @@
     ],
     "language": "PYTHON",
     "notebook": true,
-    "entrypoint": "unsupervised-baseline.ipynb"
+    "entrypoint": "unsupervised-baseline.ipynb",
+    "kaggleUrl": "https://www.kaggle.com/code/crunchdao/structural-break-unsupervised-baseline"
 }
