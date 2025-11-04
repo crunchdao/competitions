@@ -7,8 +7,7 @@ from crunch.container import GeneratorWrapper
 from crunch.utils import smart_call
 
 if typing.TYPE_CHECKING:
-    from crunch.runner.unstructured import (RunnerContext,
-                                            RunnerExecutorContext, UserModule)
+    from crunch.runner.unstructured import RunnerContext, RunnerExecutorContext, UserModule
 
 
 def load_data(
@@ -22,38 +21,46 @@ def load_data(
 
 def run(
     context: "RunnerContext",
+    prediction_directory_path: str,
 ):
     if context.force_first_train:
         context.execute(
             command="train",
         )
 
-    prediction = context.execute(
+    prediction_parquet_file_path = os.path.join(prediction_directory_path, "prediction.parquet")
+
+    context.execute(
         command="infer",
-        return_prediction=True,
         parameters={
             "determinism_check": False,
+            "prediction_parquet_file_path": prediction_parquet_file_path,
         }
     )
+
+    prediction = pandas.read_parquet(prediction_parquet_file_path)
 
     if context.is_determinism_check_enabled:
         percentage = 0.3
         tolerance = 1e-8
 
-        context.log(f"checking determinism by executing the inference again with {percentage*100:.0f}% of the data (tolerance: {tolerance})")
+        context.log(f"checking determinism by executing the inference again with {percentage * 100:.0f}% of the data (tolerance: {tolerance})")
 
-        prediction2 = context.execute(
+        prediction_determinism_parquet_file_path = os.path.join(prediction_directory_path, "prediction.determinism.parquet")
+
+        context.execute(
             command="infer",
-            return_prediction=True,
             parameters={
                 "determinism_check": percentage,
+                "prediction_parquet_file_path": prediction_determinism_parquet_file_path,
             }
         )
 
+        prediction2 = pandas.read_parquet(prediction_parquet_file_path)
+        os.unlink(prediction_determinism_parquet_file_path)
+
         is_deterministic = numpy.allclose(prediction.loc[prediction2.index], prediction2, atol=tolerance)
         context.report_determinism(is_deterministic)
-
-    return prediction
 
 
 def execute(
@@ -87,6 +94,7 @@ def execute(
 
     def infer(
         determinism_check: typing.Union[typing.Literal[False], float],
+        prediction_parquet_file_path: str,
     ):
         x_test_name = "X_test.reduced.parquet" if context.is_local else "X_test.parquet"
         x_test = pandas.read_parquet(os.path.join(data_directory_path, x_test_name))
@@ -131,7 +139,7 @@ def execute(
             index=pandas.Index(dataset_ids, name="id")
         )
 
-        return prediction
+        prediction.to_parquet(prediction_parquet_file_path)
 
     return {
         "train": train,

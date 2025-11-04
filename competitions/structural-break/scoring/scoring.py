@@ -2,7 +2,7 @@ import os
 import typing
 
 import crunch
-import crunch.custom
+import crunch.unstructured
 import crunch.utils
 import numpy
 import pandas
@@ -18,11 +18,13 @@ tracer = crunch.utils.Tracer()
 
 
 def check(
-    prediction: pandas.DataFrame,
+    prediction_directory_path: str,
     data_directory_path: str,
 ):
+    prediction = _load_prediction(prediction_directory_path)
+
     with tracer.log("Check for required columns"):
-        difference = crunch.custom.utils.delta_message(
+        difference = crunch.unstructured.utils.delta_message(
             {'prediction'},
             set(prediction.columns),
         )
@@ -47,7 +49,7 @@ def check(
 
     y_test = _load_y_test(data_directory_path)
     with tracer.log("Check for ids"):
-        difference = crunch.custom.utils.delta_message(
+        difference = crunch.unstructured.utils.delta_message(
             y_test.index,
             prediction.index,
         )
@@ -60,13 +62,14 @@ def check(
 
 
 def score(
-    prediction: pandas.DataFrame,
+    prediction_directory_path: str,
     data_directory_path: str,
     target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
 ):
     metric = target_and_metrics[0][1][0]  # [first entry], [take list of metrics], [take first metric]
     assert metric.name == "roc-auc", "missing roc-auc metric"
 
+    prediction = _load_prediction(prediction_directory_path)
     y_test = _load_y_test(data_directory_path)
 
     with tracer.log("Reindex prediction"):
@@ -84,6 +87,13 @@ def score(
     return {
         metric.id: crunch.scoring.ScoredMetric(value, [])
     }
+
+
+def _load_prediction(prediction_directory_path: str) -> pandas.DataFrame:
+    path = os.path.join(prediction_directory_path, "prediction.parquet")
+
+    with tracer.log("Loading prediction"):
+        return pandas.read_parquet(path)
 
 
 def _load_y_test(data_directory_path: str) -> pandas.Series:

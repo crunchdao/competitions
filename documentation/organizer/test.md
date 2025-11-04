@@ -113,7 +113,7 @@ Raise an error that will be displayed to the user if not.
 ```bash
 crunch organizer <competition name> test scoring check \
     --data-directory <data directory> \
-    --prediction-file <prediction file> \
+    --prediction-directory <prediction directory> \
     --phase-type <"SUBMISSION" or "OUT_OF_SAMPLE">
 ```
 
@@ -131,14 +131,14 @@ class ParticipantVisibleError(Exception):
 
 
 def check(
-    prediction: pandas.DataFrame,
+    prediction_directory_path: str,
     data_directory_path: str,
     target_names: list[str],
     phase_type: PhaseType
 ) -> None:
     """
     Parameters:
-        prediction: The dataframe to check.
+        prediction_directory_path: Directory containing the prediction.
         data_directory_path: Directory containing the data.
         target_names: List of the name of the targets.
         phase_type: Current phase type.
@@ -164,7 +164,7 @@ Any check can be ignored because the prediction should already be valid thanks t
 ```bash
 crunch organizer <competition name> test scoring score \
     --data-directory <data directory> \
-    --prediction-file <prediction file> \
+    --prediction-directory <prediction directory> \
     --phase-type <"SUBMISSION" or "OUT_OF_SAMPLE">
 ```
 
@@ -178,14 +178,14 @@ import pandas
 
 
 def score(
-    prediction: pandas.DataFrame,
+    prediction_directory_path: str,
     data_directory_path: str,
     phase_type: PhaseType,
     target_and_metrics: list[tuple[Target, list[Metric]]],
 ) -> dict[int, ScoredMetric]:
     """
     Parameters:
-        prediction: The dataframe to score.
+        prediction_directory_path: Directory containing the prediction.
         data_directory_path: Directory containing the data.
         phase_type: Current phase type.
         target_and_metrics: List of targets and metrics.
@@ -208,9 +208,9 @@ The code must be in the file named `leaderboard.py`.
 ```bash
 crunch organizer <competition name> test leaderboard compare \
     --data-directory <data directory> \
-    --prediction-file <prediction file 1> \
-    --prediction-file <prediction file 2> \
-    --prediction-file <prediction file n>
+    --prediction-directory <prediction id 1> <prediction directory 1> \
+    --prediction-directory <prediction id 2> <prediction directory 2> \
+    --prediction-directory <prediction id n> <prediction directory n>
 ```
 
 ### API
@@ -223,13 +223,13 @@ import pandas
 
 def compare(
     targets: list[Target],
-    predictions: dict[int, pandas.DataFrame],
+    prediction_directory_path_by_id: dict[int, str],
     combinations: list[tuple[int, int]],
 ) -> list[ComparedSimilarity]:
     """
     Parameters:
         targets: List of targets for comparing columns.
-        predictions: Mapping from a prediction's id to its dataframe.
+        prediction_directory_path_by_id: Mapping from a prediction's id to its directory.
         combinations: List of ids to be compared with each other (left and right).
 
     Return:
