@@ -56,7 +56,7 @@ def check(
         sections = [
             "Method Description",
             "Rationale",
-            "Data",
+            "Data and Resources Used",
         ]
 
         for section in sections:
