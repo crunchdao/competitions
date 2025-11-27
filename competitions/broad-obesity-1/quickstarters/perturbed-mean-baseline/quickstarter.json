@@ -1,0 +1,11 @@
+{
+    "title": "Perturbed Mean Baseline",
+    "authors": [
+        {
+            "name": "The Broad Team"
+        }
+    ],
+    "language": "PYTHON",
+    "notebook": true,
+    "entrypoint": "perturbed-mean-baseline.ipynb"
+}
