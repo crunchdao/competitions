@@ -280,5 +280,13 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode,windows,macos,linux,jupyternotebooks
 
 data/
+prediction/
+resources/
 *.parquet
 .crunchdao/
+
+**/scoring/*
+!**/scoring/submission.py
+!**/scoring/scoring.py
+!**/scoring/leaderboard.py
+!**/scoring/runner.py
