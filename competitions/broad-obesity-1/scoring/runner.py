@@ -26,12 +26,12 @@ def run(
     global shared_local_prediction_instance
 
     if context.is_local:
-        genes_to_score_file_path = os.path.join(data_directory_path, "program_proportion_local_gtruth.csv")
-        genes_to_score = pandas.read_csv(genes_to_score_file_path, usecols=["gene"])["gene"].tolist()
+        perturbations_to_score_file_path = os.path.join(data_directory_path, "program_proportion_local_gtruth.csv")
+        perturbations_to_score = pandas.read_csv(perturbations_to_score_file_path, usecols=["gene"])["gene"].tolist()
     else:
-        genes_to_score_file_path = os.path.join(data_directory_path, "genes_to_score.txt")
-        genes_to_score = pandas.read_csv(genes_to_score_file_path, header=None)[0].tolist()
-        os.unlink(genes_to_score_file_path)
+        perturbations_to_score_file_path = os.path.join(data_directory_path, "perturbations_to_score.txt")
+        perturbations_to_score = pandas.read_csv(perturbations_to_score_file_path, header=None)[0].tolist()
+        os.unlink(perturbations_to_score_file_path)
 
     if context.force_first_train:
         context.execute(
@@ -68,7 +68,7 @@ def run(
         else:
             prediction = scanpy.read_h5ad(prediction_file_path)
 
-        prediction = prediction[prediction.obs["gene"].isin(genes_to_score)]
+        prediction = prediction[prediction.obs["gene"].isin(perturbations_to_score)]
         prediction.write(prediction_file_path)
     finally:
         if context.is_local:
@@ -205,8 +205,5 @@ def _load_predict_perturbations(
 def _load_genes_to_predict(
     data_directory_path: str,
 ) -> List[str]:
-    hvg_genes = pandas.read_csv(os.path.join(data_directory_path, "hvg_gene.csv"))["hvg_gene"].tolist()
-
-    return list({
-        *hvg_genes
-    })
+    txt_file_path = os.path.join(data_directory_path, "genes_to_predict.txt")
+    return pandas.read_csv(txt_file_path, header=None)[0].tolist()
