@@ -106,10 +106,10 @@ def score(
     l1_distance_metric = _find_metric_by_name(target_and_metrics, "l1-distance")
 
     with tracer.log("Load ground truth: TF150"):
-        gtruth_adata = scanpy.read_h5ad(os.path.join(data_directory_path, "150_adata_with_labels_valid.h5ad"))
+        gtruth_adata = scanpy.read_h5ad(os.path.join(data_directory_path, "tf150_gtruth.h5ad"))
 
     with tracer.log("Load ground truth: predict_program_proportion"):
-        ground_truth_proportion = pandas.read_csv(os.path.join(data_directory_path, "150_adata_with_labels_state_prop_valid.csv"))
+        ground_truth_proportion = pandas.read_csv(os.path.join(data_directory_path, "program_proportion_gtruth.csv"))
 
     with tracer.log("Load prediction: prediction"):
         prediction_adata = scanpy.read_h5ad(os.path.join(prediction_directory_path, PREDICTION_FILE_NAME))
