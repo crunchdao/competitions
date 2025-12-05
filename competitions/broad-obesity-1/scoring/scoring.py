@@ -232,25 +232,38 @@ def _mmd(
 
         return mmd_val, num_batch_element ** 2
 
+    def balance_source_target_sample_per_perturbation(gtruth_X_tgt, pred_X_tgt):
+        num_gtruth = gtruth_X_tgt.shape[0]
+        num_pred = pred_X_tgt.shape[0]
+        min_sample = min(num_gtruth, num_pred)
+
+        return gtruth_X_tgt[0:min_sample, :], pred_X_tgt[0:min_sample, :]
+
     kernel_mul = 2.0
     kernel_num = 5
-    fix_sigma = None
+    fix_sigma = 7880
+    batch_size = 100
 
-    num_source = ground_truth_X.shape[0]
-    batch_size = prediction_X.shape[0]
-    num_batches = 1  # num_source // batch_size
+    # Balancing the samples to compute mmd using equal number of samples
+    gtruth_X, pred_X = balance_source_target_sample_per_perturbation(ground_truth_X, prediction_X)
+
+    # Sharding the X into smaller batches
+    num_batches = gtruth_X.shape[0] // batch_size if gtruth_X.shape[0] % batch_size == 0 else (gtruth_X.shape[0] // batch_size) + 1
+
+    # Do not compute MMD if only one sample
+    if gtruth_X[(num_batches - 1) * batch_size:num_batches * batch_size, :].shape[0] < 2:
+        num_batches = num_batches - 1
 
     results = [
         _compute_mmd_batch(
-            ground_truth_X[bidx * batch_size:(bidx + 1) * batch_size, :],
-            prediction_X,
+            gtruth_X[bidx * batch_size:(bidx + 1) * batch_size, :],
+            pred_X[bidx * batch_size:(bidx + 1) * batch_size, :],
             kernel_mul,
             kernel_num,
             fix_sigma,
             _gaussian_kernel
         )
         for bidx in tracer.loop(range(num_batches), lambda bidx: f"Processing batch {bidx + 1} of {num_batches}")
-        if ground_truth_X[bidx * batch_size:(bidx + 1) * batch_size, :].shape[0] == prediction_X.shape[0]
     ]
 
     mmd_dist_sum = sum(r[0] for r in results)
