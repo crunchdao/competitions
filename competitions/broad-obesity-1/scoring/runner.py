@@ -11,8 +11,7 @@ if TYPE_CHECKING:
     from crunch.runner.unstructured import RunnerContext, RunnerExecutorContext, UserModule
 
 
-PREDICTION_H5AD_FILE_NAME = "prediction.h5ad"
-PREDICTION_PARQUET_FILE_NAME = PREDICTION_H5AD_FILE_NAME + ".parquet"
+PREDICTION_FILE_NAME = "prediction.h5ad"
 PROGRAM_PROPORTION_FILE_NAME = "predict_program_proportion.csv"
 
 # Optimization for local testing
@@ -45,9 +44,9 @@ def run(
         location="before",
     )
 
-    prediction_h5ad_file_path = os.path.join(
+    prediction_file_path = os.path.join(
         prediction_directory_path,
-        PREDICTION_H5AD_FILE_NAME,
+        PREDICTION_FILE_NAME,
     )
 
     program_proportion_csv_file_path = os.path.join(
@@ -58,41 +57,22 @@ def run(
     context.execute(
         command="infer",
         parameters={
-            "prediction_h5ad_file_path": prediction_h5ad_file_path,
+            "prediction_file_path": prediction_file_path,
             "program_proportion_csv_file_path": program_proportion_csv_file_path,
         }
     )
 
     try:
-        if context.is_local:
+        if context.is_local and shared_local_prediction_instance is not None:
             prediction = shared_local_prediction_instance
-            assert prediction
         else:
-            prediction = scanpy.read_h5ad(prediction_h5ad_file_path)
+            prediction = scanpy.read_h5ad(prediction_file_path)
 
         prediction = prediction[prediction.obs["gene"].isin(genes_to_score)]
-        # prediction.write(prediction_h5ad_file_path)
-
-        prediction_dataframe = pandas.DataFrame(
-            prediction.X,
-            columns=prediction.var_names.values,
-            index=prediction.obs.index,
-        )
-        prediction_dataframe.insert(0, "gene", prediction.obs["gene"].values)
-        prediction_dataframe.to_parquet(prediction_h5ad_file_path + ".parquet")
+        prediction.write(prediction_file_path)
     finally:
         if context.is_local:
             shared_local_prediction_instance = None
-        elif os.path.exists(prediction_h5ad_file_path):
-            os.unlink(prediction_h5ad_file_path)
-
-    # Code to convert back to an AnnData object:
-    # genes = prediction_dataframe.columns[1:]
-    # restored = anndata.AnnData(
-    #     X=prediction_dataframe[genes].values,
-    #     obs=prediction_dataframe[["gene"]],
-    #     var=pandas.DataFrame(index=genes),
-    # )
 
     _validate_prediction_files(
         context=context,
@@ -124,7 +104,7 @@ def execute(
         )
 
     def infer(
-        prediction_h5ad_file_path: str,
+        prediction_file_path: str,
         program_proportion_csv_file_path: str,
     ):
         infer_function = module.get_function("infer")
@@ -141,20 +121,21 @@ def execute(
             }
         )
 
-        assert isinstance(result, tuple), f"infer.result: expected tuple, got {result.__class__.__name__}"
-        assert len(result) == 2, f"infer.result: expected tuple of length 2, got {len(result)}"
-        assert isinstance(result[0], anndata.AnnData), f"infer.result[0]: expected anndata.AnnData, got {result[0].__class__.__name__}"
-        assert isinstance(result[1], pandas.DataFrame), f"infer.result[1]: expected anndata.DataFrame, got {result[1].__class__.__name__}"
+        if result is not None:
+            assert isinstance(result, tuple), f"infer.result: expected tuple, got {result.__class__.__name__}"
+            assert len(result) == 2, f"infer.result: expected tuple of length 2, got {len(result)}"
+            assert isinstance(result[0], anndata.AnnData), f"infer.result[0]: expected anndata.AnnData, got {result[0].__class__.__name__}"
+            assert isinstance(result[1], pandas.DataFrame), f"infer.result[1]: expected anndata.DataFrame, got {result[1].__class__.__name__}"
 
-        prediction, program_proportion = result
+            prediction, program_proportion = result
 
-        if context.is_local:
-            global shared_local_prediction_instance
-            shared_local_prediction_instance = prediction
-        else:
-            prediction.write(prediction_h5ad_file_path)
+            if context.is_local:
+                global shared_local_prediction_instance
+                shared_local_prediction_instance = prediction
+            else:
+                prediction.write(prediction_file_path)
 
-        program_proportion.to_csv(program_proportion_csv_file_path, index=False)
+            program_proportion.to_csv(program_proportion_csv_file_path, index=False)
 
     return {
         "train": train,
@@ -172,7 +153,7 @@ def _validate_prediction_files(
 
     current_files = set(os.listdir(prediction_directory_path))
     expected_files = {
-        PREDICTION_PARQUET_FILE_NAME,
+        PREDICTION_FILE_NAME,
         PROGRAM_PROPORTION_FILE_NAME,
     }
 

@@ -12,7 +12,7 @@ from crunch.scoring import ScoredMetric
 from crunch.unstructured.utils import delta_message
 from numpy.typing import NDArray
 
-PREDICTION_PARQUET_FILE_NAME = "prediction.h5ad.parquet"
+PREDICTION_FILE_NAME = "prediction.h5ad"
 PROGRAM_PROPORTION_FILE_NAME = "predict_program_proportion.csv"
 
 
@@ -31,7 +31,7 @@ def check(
     with tracer.log("Ensure files"):
         difference = delta_message(
             {
-                PREDICTION_PARQUET_FILE_NAME,
+                PREDICTION_FILE_NAME,
                 PROGRAM_PROPORTION_FILE_NAME,
             },
             set(os.listdir(prediction_directory_path)),
@@ -41,7 +41,7 @@ def check(
             raise ParticipantVisibleError(f"Prediction files are not valid: {difference}")
 
     with tracer.log("Load prediction: prediction"):
-        prediction = pandas.read_parquet(os.path.join(prediction_directory_path, PREDICTION_PARQUET_FILE_NAME))
+        prediction = scanpy.read_h5ad(os.path.join(prediction_directory_path, PREDICTION_FILE_NAME))
 
     with tracer.log("Validating .var_names"):
         pass  # TODO Validate var_names
@@ -108,24 +108,17 @@ def score(
     with tracer.log("Load ground truth: TF150"):
         gtruth_adata = scanpy.read_h5ad(os.path.join(data_directory_path, "150_adata_with_labels_valid.h5ad"))
 
-        with tracer.log("Convert to array"):
-            ground_truth_X = _as_numpy_array(gtruth_adata.X)
-
     with tracer.log("Load ground truth: predict_program_proportion"):
         ground_truth_proportion = pandas.read_csv(os.path.join(data_directory_path, "150_adata_with_labels_state_prop_valid.csv"))
 
     with tracer.log("Load prediction: prediction"):
-        prediction = pandas.read_parquet(os.path.join(prediction_directory_path, PREDICTION_PARQUET_FILE_NAME))
-
-        with tracer.log("Convert to array"):
-            prediction_X = prediction[prediction.columns[1:]].values
+        prediction_adata = scanpy.read_h5ad(os.path.join(prediction_directory_path, PREDICTION_FILE_NAME))
 
     with tracer.log("Load prediction: predict_program_proportion"):
         pred_proportion = pandas.read_csv(os.path.join(prediction_directory_path, PROGRAM_PROPORTION_FILE_NAME))
 
     with tracer.log("Extract unstructured annotation"):
         hvg_mask = gtruth_adata.uns["high_var_gene_mask"]
-        prediction_hvg_mask = [False, *hvg_mask]  # skip "gene" column
         perturbed_centroid = gtruth_adata.uns["perturbed_centroid_train"][hvg_mask]
 
     person_values = []
@@ -137,10 +130,10 @@ def score(
         with tracer.log("Filter the slice"):
             hvg_mask = gtruth_adata.uns["high_var_gene_mask"]
             gtruth_mask = gtruth_adata.obs["gene"] == perturbation
-            prediction_mask = prediction["gene"] == perturbation
+            prediction_mask = prediction_adata.obs["gene"] == perturbation
 
             gtruth_X = _as_numpy_array(gtruth_adata[gtruth_mask, hvg_mask].X)
-            pred_X = prediction.loc[prediction_mask, prediction_hvg_mask].values
+            pred_X = _as_numpy_array(prediction_adata[prediction_mask, hvg_mask].X)
 
         with tracer.log("Compute pearson(X)"):
             person_value = _pearson(
