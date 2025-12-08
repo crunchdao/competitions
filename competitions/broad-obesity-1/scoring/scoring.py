@@ -278,7 +278,7 @@ def _mmd(
 
     kernel_mul = 2.0
     kernel_num = 5
-    fix_sigma = 7880
+    fix_sigma = 2326
     batch_size = 100
 
     # Balancing the samples to compute mmd using equal number of samples
