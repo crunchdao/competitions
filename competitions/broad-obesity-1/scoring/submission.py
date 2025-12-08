@@ -18,6 +18,7 @@ def check(
     submission_files: List[File],
     model_files: List[File],
 ):
+    print(submission_files)
     with tracer.log("Finding report file"):
         report_md_file_path = "Method description.md"
         report_md_file = _find_file_by_path(submission_files, report_md_file_path)
@@ -68,23 +69,27 @@ def check(
                 raise ParticipantVisibleError(f"`{report_md_file_path}` must not contain multiple section titled `{section}`.")
 
     with tracer.log("Counting non blank lines"):
-        line_count = 0
+        sentence_count = 0
         for line in content.splitlines():
-            line = line.strip()
 
-            if not line:
-                continue
+            for sentence in re.split(r"[\.!\?;:]", line):
+                sentence = sentence.strip()
 
-            # TODO Should titles be skipped?
-            line_count += 1
+                if not sentence:
+                    continue
+
+                # TODO Should titles be skipped?
+                sentence_count += 1
+
+        print(f"sentence_count", sentence_count)
 
         minimum_line_count = 15
-        if line_count < minimum_line_count:
+        if sentence_count < minimum_line_count:
             plural, be = "", "was"
-            if line_count > 1:
+            if sentence_count > 1:
                 plural, be = "s", "were"
 
-            raise ParticipantVisibleError(f"`{report_md_file_path}` must be longer than {minimum_line_count} lines, but only {line_count} non-blank line{plural} {be} found.")
+            raise ParticipantVisibleError(f"`{report_md_file_path}` must be longer than {minimum_line_count} lines, but only {sentence_count} non-blank line{plural} {be} found.")
 
 
 def _find_file_by_path(
