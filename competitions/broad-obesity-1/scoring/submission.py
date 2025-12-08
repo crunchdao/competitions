@@ -45,10 +45,6 @@ def check(
         if not content.isascii():
             raise ParticipantVisibleError(f"`{report_md_file_path}` must contain only ASCII characters.")
 
-    with tracer.log("Checking for the default comment"):
-        if "<!-- Don't forget to change me -->" in content:
-            raise ParticipantVisibleError(f"Default comment found in `{report_md_file_path}`. Has it been edited?")
-
     with tracer.log("Remove all comments"):
         content = re.sub(r"<!--.+?-->", r"", content)
 

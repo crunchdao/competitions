@@ -1,4 +1,5 @@
 import os
+import statistics
 from typing import Any, List, Tuple
 
 import crunch
@@ -39,11 +40,48 @@ def check(
         if difference:
             raise ParticipantVisibleError(f"Prediction files are not valid: {difference}")
 
+    with tracer.log("Load ground truth: TF150"):
+        gtruth_adata = scanpy.read_h5ad(os.path.join(data_directory_path, "tf150_gtruth.h5ad"))
+
     with tracer.log("Load prediction: prediction"):
         prediction = scanpy.read_h5ad(os.path.join(prediction_directory_path, PREDICTION_FILE_NAME))
 
-    with tracer.log("Validating .var_names"):
-        pass  # TODO Validate var_names
+        with tracer.log("Validating .var_names"):
+            expected_column_count = gtruth_adata.uns["scoring_gene_mask"].sum()
+
+            if len(prediction.var_names) != expected_column_count:
+                raise ParticipantVisibleError("There is an invalid number of columns (`.var_names`). Perhaps the wrong ones were predicted?")
+
+        with tracer.log("Validating .obs"):
+            with tracer.log("Validating columns"):
+                difference = delta_message(
+                    {"gene"},
+                    set(prediction.obs.columns),
+                )
+
+                if difference:
+                    raise ParticipantVisibleError(f"Invalid column in .obs: {difference}")
+
+            with tracer.log("Validating lines"):
+                expected_genes = set(gtruth_adata.obs["gene"].unique())
+                got_genes = set(prediction.obs["gene"].unique())
+
+                print("expected", sorted(expected_genes))
+                print("got     ", sorted(got_genes))
+
+                if expected_genes != got_genes:
+                    raise ParticipantVisibleError("There is an invalid number of genes (`.obs`). Perhaps the wrong ones were predicted?")
+
+                line_count_per_gene = prediction.obs.value_counts()\
+                    .reset_index()\
+                    .set_index("gene", drop=True)["count"]\
+                    .to_dict()
+
+                print("line_count_per_gene", line_count_per_gene)
+
+                for gene in expected_genes:
+                    if line_count_per_gene[gene] != 100:
+                        raise ParticipantVisibleError("There is an invalid number of lines (`.obs`) for a gene. Perhaps the wrong ones were predicted?")
 
     with tracer.log("Validating predict_program_proportion"):
         data_columns = ["adipo", "pre_adipo", "lipo", "other"]
@@ -105,46 +143,61 @@ def score(
     l1_distance_metric = _find_metric_by_name(target_and_metrics, "l1-distance")
 
     with tracer.log("Load ground truth: TF150"):
-        gtruth_adata = scanpy.read_h5ad(os.path.join(data_directory_path, "150_adata_with_labels_valid.h5ad"))
+        gtruth_adata = scanpy.read_h5ad(os.path.join(data_directory_path, "tf150_gtruth.h5ad"))
 
     with tracer.log("Load ground truth: predict_program_proportion"):
-        ground_truth_proportion = pandas.read_csv(os.path.join(data_directory_path, "150_adata_with_labels_state_prop_valid.csv"))
+        ground_truth_proportion = pandas.read_csv(os.path.join(data_directory_path, "program_proportion_gtruth.csv"))
 
     with tracer.log("Load prediction: prediction"):
         prediction_adata = scanpy.read_h5ad(os.path.join(prediction_directory_path, PREDICTION_FILE_NAME))
 
-        with tracer.log("Convert to array"):
-            ground_truth_X = _as_numpy_array(gtruth_adata.X)
-            prediction_X = _as_numpy_array(prediction_adata.X)
-
     with tracer.log("Load prediction: predict_program_proportion"):
         pred_proportion = pandas.read_csv(os.path.join(prediction_directory_path, PROGRAM_PROPORTION_FILE_NAME))
 
-    with tracer.log("Extract perturbed centroid"):
-        perturbed_centroid = gtruth_adata.uns["perturbed_centroid_train"]
+    with tracer.log("Extract unstructured annotation"):
+        hvg_mask = gtruth_adata.uns["scoring_gene_mask"]
+        perturbed_centroid = gtruth_adata.uns["perturbed_centroid_train"][hvg_mask]
 
-    del gtruth_adata
-    del prediction_adata
+    person_values = []
+    mmd_values = []
 
-    with tracer.log("Compute pearson(X)"):
-        person_value = _pearson(
-            ground_truth_X,
-            prediction_X,
-            perturbed_centroid,
-        )
+    perturbations = gtruth_adata.obs["gene"].cat.categories.tolist()
+    for perturbation in tracer.loop(perturbations, "Scoring gene: {value}"):
+
+        with tracer.log("Filter the slice"):
+            hvg_mask = gtruth_adata.uns["scoring_gene_mask"]
+            gtruth_mask = gtruth_adata.obs["gene"] == perturbation
+            prediction_mask = prediction_adata.obs["gene"] == perturbation
+
+            gtruth_X = _as_numpy_array(gtruth_adata[gtruth_mask, hvg_mask].X)
+            pred_X = _as_numpy_array(prediction_adata[prediction_mask].X)
+
+        with tracer.log("Compute pearson(X)"):
+            person_value = _pearson(
+                gtruth_X,
+                pred_X,
+                perturbed_centroid,
+            )
+
+            person_values.append(person_value)
+
+        with tracer.log("Compute MMD(X)"):
+            mmd_value = _mmd(
+                gtruth_X,
+                pred_X,
+            )
+
+            mmd_values.append(mmd_value)
+
+    with tracer.log("Compute averages"):
+        person_value = statistics.mean(person_values)
+        mmd_value = statistics.mean(mmd_values)
 
     with tracer.log("Compute L1_DISTANCE(X)"):
         l1_distance_value = _l1_distance(
             ground_truth_proportion,
             pred_proportion,
             gene_column_name="gene",
-        )
-
-    with tracer.log("Compute MMD(X)"):
-        # mmd_value = 9999.99
-        mmd_value = _mmd(
-            ground_truth_X,
-            prediction_X,
         )
 
     print("person(X): {}".format(person_value))
@@ -182,19 +235,7 @@ def _mmd(
     ground_truth_X: NDArray[numpy.float64],
     prediction_X: NDArray[numpy.float64],
 ) -> float:
-    def compute_mmd_batch(X_batch, Y_batch, kernel_mul, kernel_num, fix_sigma, kernel_func):
-        num_batch_element = X_batch.shape[0]
-
-        kernels = kernel_func(X_batch, Y_batch, kernel_mul, kernel_num, fix_sigma)
-        XX = kernels[:num_batch_element, :num_batch_element]
-        YY = kernels[num_batch_element:, num_batch_element:]
-        XY = kernels[:num_batch_element, num_batch_element:]
-        YX = kernels[num_batch_element:, :num_batch_element]
-        mmd_val = numpy.sum(XX + YY - XY - YX)
-
-        return mmd_val, num_batch_element ** 2
-
-    def gaussian_kernel(source, target, kernel_mul, kernel_num, fix_sigma):
+    def _gaussian_kernel(source, target, kernel_mul, kernel_num, fix_sigma):
         # Getting the L2 distance
         n_samples = int(source.shape[0]) + int(target.shape[0])
         total = numpy.concatenate([source, target], axis=0)
@@ -216,21 +257,50 @@ def _mmd(
 
         return sum(kernel_val)
 
+    def _compute_mmd_batch(X_batch, Y_batch, kernel_mul, kernel_num, fix_sigma, kernel_func):
+        num_batch_element = X_batch.shape[0]
+
+        kernels = kernel_func(X_batch, Y_batch, kernel_mul, kernel_num, fix_sigma)
+        XX = kernels[:num_batch_element, :num_batch_element]
+        YY = kernels[num_batch_element:, num_batch_element:]
+        XY = kernels[:num_batch_element, num_batch_element:]
+        YX = kernels[num_batch_element:, :num_batch_element]
+        mmd_val = numpy.sum(XX + YY - XY - YX)
+
+        return mmd_val, num_batch_element ** 2
+
+    def balance_source_target_sample_per_perturbation(gtruth_X_tgt, pred_X_tgt):
+        num_gtruth = gtruth_X_tgt.shape[0]
+        num_pred = pred_X_tgt.shape[0]
+        min_sample = min(num_gtruth, num_pred)
+
+        return gtruth_X_tgt[0:min_sample, :], pred_X_tgt[0:min_sample, :]
+
     kernel_mul = 2.0
     kernel_num = 5
-    fix_sigma = None
+    fix_sigma = 2326
+    batch_size = 100
 
-    num_source = ground_truth_X.shape[0]
-    num_batches = 30 * 5  # (30 for 20k samples)
-    batch_size = num_source // num_batches
+    # Balancing the samples to compute mmd using equal number of samples
+    gtruth_X, pred_X = balance_source_target_sample_per_perturbation(ground_truth_X, prediction_X)
+
+    # Sharding the X into smaller batches
+    num_batches = gtruth_X.shape[0] // batch_size if gtruth_X.shape[0] % batch_size == 0 else (gtruth_X.shape[0] // batch_size) + 1
+
+    # Do not compute MMD if only one sample
+    if gtruth_X[(num_batches - 1) * batch_size:num_batches * batch_size, :].shape[0] < 2:
+        num_batches = num_batches - 1
 
     results = [
-        compute_mmd_batch(
-            ground_truth_X[bidx * batch_size:(bidx + 1) * batch_size, :],
-            prediction_X[bidx * batch_size:(bidx + 1) * batch_size, :],
-            kernel_mul, kernel_num, fix_sigma, gaussian_kernel
+        _compute_mmd_batch(
+            gtruth_X[bidx * batch_size:(bidx + 1) * batch_size, :],
+            pred_X[bidx * batch_size:(bidx + 1) * batch_size, :],
+            kernel_mul,
+            kernel_num,
+            fix_sigma,
+            _gaussian_kernel
         )
-        for bidx in tracer.loop(range(num_batches), lambda bidx: f"Processing batch {bidx} of {num_batches}")
+        for bidx in tracer.loop(range(num_batches), lambda bidx: f"Processing batch {bidx + 1} of {num_batches}")
     ]
 
     mmd_dist_sum = sum(r[0] for r in results)
