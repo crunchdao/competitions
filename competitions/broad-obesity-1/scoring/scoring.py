@@ -257,7 +257,7 @@ def _mmd(
 
         return sum(kernel_val)
 
-    def _compute_mmd_batch(X_batch, Y_batch, kernel_mul, kernel_num, fix_sigma, kernel_func):
+    def _compute_mmd(X_batch, Y_batch, kernel_mul, kernel_num, fix_sigma, kernel_func):
         num_batch_element = X_batch.shape[0]
 
         kernels = kernel_func(X_batch, Y_batch, kernel_mul, kernel_num, fix_sigma)
@@ -267,7 +267,7 @@ def _mmd(
         YX = kernels[num_batch_element:, :num_batch_element]
         mmd_val = numpy.sum(XX + YY - XY - YX)
 
-        return mmd_val, num_batch_element ** 2
+        return mmd_val / num_batch_element ** 2
 
     def balance_source_target_sample_per_perturbation(gtruth_X_tgt, pred_X_tgt):
         num_gtruth = gtruth_X_tgt.shape[0]
@@ -279,35 +279,18 @@ def _mmd(
     kernel_mul = 2.0
     kernel_num = 5
     fix_sigma = 2326
-    batch_size = 100
 
     # Balancing the samples to compute mmd using equal number of samples
     gtruth_X, pred_X = balance_source_target_sample_per_perturbation(ground_truth_X, prediction_X)
 
-    # Sharding the X into smaller batches
-    num_batches = gtruth_X.shape[0] // batch_size if gtruth_X.shape[0] % batch_size == 0 else (gtruth_X.shape[0] // batch_size) + 1
-
-    # Do not compute MMD if only one sample
-    if gtruth_X[(num_batches - 1) * batch_size:num_batches * batch_size, :].shape[0] < 2:
-        num_batches = num_batches - 1
-
-    results = [
-        _compute_mmd_batch(
-            gtruth_X[bidx * batch_size:(bidx + 1) * batch_size, :],
-            pred_X[bidx * batch_size:(bidx + 1) * batch_size, :],
-            kernel_mul,
-            kernel_num,
-            fix_sigma,
-            _gaussian_kernel
-        )
-        for bidx in tracer.loop(range(num_batches), lambda bidx: f"Processing batch {bidx + 1} of {num_batches}")
-    ]
-
-    mmd_dist_sum = sum(r[0] for r in results)
-    num_element = sum(r[1] for r in results)
-
-    mmd_dist = mmd_dist_sum / num_element
-    return mmd_dist
+    return _compute_mmd(
+        gtruth_X,
+        pred_X,
+        kernel_mul,
+        kernel_num,
+        fix_sigma,
+        _gaussian_kernel,
+    )
 
 
 def _l1_distance(
