@@ -47,7 +47,7 @@ def check(
         prediction = scanpy.read_h5ad(os.path.join(prediction_directory_path, PREDICTION_FILE_NAME))
 
         with tracer.log("Validating .var_names"):
-            expected_column_count = gtruth_adata.uns["high_var_gene_mask"].sum()
+            expected_column_count = gtruth_adata.uns["scoring_gene_mask"].sum()
 
             if len(prediction.var_names) != expected_column_count:
                 raise ParticipantVisibleError("There is an invalid number of columns (`.var_names`). Perhaps the wrong ones were predicted?")
@@ -155,7 +155,7 @@ def score(
         pred_proportion = pandas.read_csv(os.path.join(prediction_directory_path, PROGRAM_PROPORTION_FILE_NAME))
 
     with tracer.log("Extract unstructured annotation"):
-        hvg_mask = gtruth_adata.uns["high_var_gene_mask"]
+        hvg_mask = gtruth_adata.uns["scoring_gene_mask"]
         perturbed_centroid = gtruth_adata.uns["perturbed_centroid_train"][hvg_mask]
 
     person_values = []
@@ -165,7 +165,7 @@ def score(
     for perturbation in tracer.loop(perturbations, "Scoring gene: {value}"):
 
         with tracer.log("Filter the slice"):
-            hvg_mask = gtruth_adata.uns["high_var_gene_mask"]
+            hvg_mask = gtruth_adata.uns["scoring_gene_mask"]
             gtruth_mask = gtruth_adata.obs["gene"] == perturbation
             prediction_mask = prediction_adata.obs["gene"] == perturbation
 

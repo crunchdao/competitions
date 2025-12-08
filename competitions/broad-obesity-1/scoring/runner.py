@@ -23,10 +23,16 @@ def run(
     if context.is_local:
         perturbations_to_score_file_path = os.path.join(data_directory_path, "program_proportion_local_gtruth.csv")
         perturbations_to_score = pandas.read_csv(perturbations_to_score_file_path, usecols=["gene"])["gene"].tolist()
+
+        genes_to_score = None
     else:
         perturbations_to_score_file_path = os.path.join(data_directory_path, "perturbations_to_score.txt")
         perturbations_to_score = pandas.read_csv(perturbations_to_score_file_path, header=None)[0].tolist()
         os.unlink(perturbations_to_score_file_path)
+
+        genes_to_score_file_path = os.path.join(data_directory_path, "genes_to_score.txt")
+        genes_to_score = pandas.read_csv(genes_to_score_file_path, header=None)[0].tolist()
+        os.unlink(genes_to_score_file_path)
 
     if context.force_first_train:
         context.execute(
@@ -57,8 +63,14 @@ def run(
         }
     )
 
+    genes_to_predict = _load_genes_to_predict(data_directory_path)
+
     prediction = scanpy.read_h5ad(prediction_h5ad_file_path)
-    prediction = prediction[prediction.obs["gene"].isin(perturbations_to_score)]
+    prediction = prediction[
+        prediction.obs["gene"].isin(perturbations_to_score),
+        sorted(set(prediction.var_names) & set(genes_to_score), key=genes_to_predict.index) if genes_to_score else slice(None)
+    ]
+
     prediction.write(prediction_h5ad_file_path)
 
     _validate_prediction_files(
