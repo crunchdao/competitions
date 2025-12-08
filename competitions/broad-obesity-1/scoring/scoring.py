@@ -40,11 +40,48 @@ def check(
         if difference:
             raise ParticipantVisibleError(f"Prediction files are not valid: {difference}")
 
+    with tracer.log("Load ground truth: TF150"):
+        gtruth_adata = scanpy.read_h5ad(os.path.join(data_directory_path, "tf150_gtruth.h5ad"))
+
     with tracer.log("Load prediction: prediction"):
         prediction = scanpy.read_h5ad(os.path.join(prediction_directory_path, PREDICTION_FILE_NAME))
 
-    with tracer.log("Validating .var_names"):
-        pass  # TODO Validate var_names
+        with tracer.log("Validating .var_names"):
+            expected_column_count = gtruth_adata.uns["high_var_gene_mask"].sum()
+
+            if len(prediction.var_names) != expected_column_count:
+                raise ParticipantVisibleError("There is an invalid number of columns (`.var_names`). Perhaps the wrong ones were predicted?")
+
+        with tracer.log("Validating .obs"):
+            with tracer.log("Validating columns"):
+                difference = delta_message(
+                    {"gene"},
+                    set(prediction.obs.columns),
+                )
+
+                if difference:
+                    raise ParticipantVisibleError(f"Invalid column in .obs: {difference}")
+
+            with tracer.log("Validating lines"):
+                expected_genes = set(gtruth_adata.obs["gene"].unique())
+                got_genes = set(prediction.obs["gene"].unique())
+
+                print("expected", sorted(expected_genes))
+                print("got     ", sorted(got_genes))
+
+                if expected_genes != got_genes:
+                    raise ParticipantVisibleError("There is an invalid number of genes (`.obs`). Perhaps the wrong ones were predicted?")
+
+                line_count_per_gene = prediction.obs.value_counts()\
+                    .reset_index()\
+                    .set_index("gene", drop=True)["count"]\
+                    .to_dict()
+
+                print("line_count_per_gene", line_count_per_gene)
+
+                for gene in expected_genes:
+                    if line_count_per_gene[gene] != 100:
+                        raise ParticipantVisibleError("There is an invalid number of lines (`.obs`) for a gene. Perhaps the wrong ones were predicted?")
 
     with tracer.log("Validating predict_program_proportion"):
         data_columns = ["adipo", "pre_adipo", "lipo", "other"]
@@ -133,7 +170,7 @@ def score(
             prediction_mask = prediction_adata.obs["gene"] == perturbation
 
             gtruth_X = _as_numpy_array(gtruth_adata[gtruth_mask, hvg_mask].X)
-            pred_X = _as_numpy_array(prediction_adata[prediction_mask].X)  # TODO no filter on hvg_mask?
+            pred_X = _as_numpy_array(prediction_adata[prediction_mask].X)
 
         with tracer.log("Compute pearson(X)"):
             person_value = _pearson(
