@@ -14,17 +14,12 @@ if TYPE_CHECKING:
 PREDICTION_FILE_NAME = "prediction.h5ad"
 PROGRAM_PROPORTION_FILE_NAME = "predict_program_proportion.csv"
 
-# Optimization for local testing
-shared_local_prediction_instance: Optional[anndata.AnnData] = None
-
 
 def run(
     context: "RunnerContext",
     data_directory_path: str,
     prediction_directory_path: str,
 ):
-    global shared_local_prediction_instance
-
     if context.is_local:
         perturbations_to_score_file_path = os.path.join(data_directory_path, "program_proportion_local_gtruth.csv")
         perturbations_to_score = pandas.read_csv(perturbations_to_score_file_path, usecols=["gene"])["gene"].tolist()
@@ -44,7 +39,7 @@ def run(
         location="before",
     )
 
-    prediction_file_path = os.path.join(
+    prediction_h5ad_file_path = os.path.join(
         prediction_directory_path,
         PREDICTION_FILE_NAME,
     )
@@ -57,22 +52,14 @@ def run(
     context.execute(
         command="infer",
         parameters={
-            "prediction_file_path": prediction_file_path,
+            "prediction_h5ad_file_path": prediction_h5ad_file_path,
             "program_proportion_csv_file_path": program_proportion_csv_file_path,
         }
     )
 
-    try:
-        if context.is_local and shared_local_prediction_instance is not None:
-            prediction = shared_local_prediction_instance
-        else:
-            prediction = scanpy.read_h5ad(prediction_file_path)
-
-        prediction = prediction[prediction.obs["gene"].isin(perturbations_to_score)]
-        prediction.write(prediction_file_path)
-    finally:
-        if context.is_local:
-            shared_local_prediction_instance = None
+    prediction = scanpy.read_h5ad(prediction_h5ad_file_path)
+    prediction = prediction[prediction.obs["gene"].isin(perturbations_to_score)]
+    prediction.write(prediction_h5ad_file_path)
 
     _validate_prediction_files(
         context=context,
@@ -102,40 +89,22 @@ def execute(
         )
 
     def infer(
-        prediction_file_path: str,
+        prediction_h5ad_file_path: str,
         program_proportion_csv_file_path: str,
     ):
         infer_function = module.get_function("infer")
 
-        result = smart_call(
+        smart_call(
             infer_function,
             default_values,
             {
                 "prediction_directory_path": prediction_directory_path,
+                "prediction_h5ad_file_path": prediction_h5ad_file_path,
+                "program_proportion_csv_file_path": program_proportion_csv_file_path,
                 "predict_perturbations": _load_predict_perturbations(data_directory_path, context.is_local),
                 "genes_to_predict": _load_genes_to_predict(data_directory_path),
-                # hvg_gene.csv
-                # read genes_to_predict.csv ->
-                #   generated from taking 600 random genes which are
-                #       not in hvg_gene.csv
             }
         )
-
-        if result is not None:
-            assert isinstance(result, tuple), f"infer.result: expected tuple, got {result.__class__.__name__}"
-            assert len(result) == 2, f"infer.result: expected tuple of length 2, got {len(result)}"
-            assert isinstance(result[0], anndata.AnnData), f"infer.result[0]: expected anndata.AnnData, got {result[0].__class__.__name__}"
-            assert isinstance(result[1], pandas.DataFrame), f"infer.result[1]: expected anndata.DataFrame, got {result[1].__class__.__name__}"
-
-            prediction, program_proportion = result
-
-            if context.is_local:
-                global shared_local_prediction_instance
-                shared_local_prediction_instance = prediction
-            else:
-                prediction.write(prediction_file_path)
-
-            program_proportion.to_csv(program_proportion_csv_file_path, index=False)
 
     return {
         "train": train,
