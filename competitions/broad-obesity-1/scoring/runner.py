@@ -91,8 +91,6 @@ def execute(
     default_values = {
         "data_directory_path": data_directory_path,
         "model_directory_path": model_directory_path,
-        "predict_perturbations": _load_predict_perturbations(data_directory_path),
-        "genes_to_predict": _load_genes_to_predict(data_directory_path),
     }
 
     def train():
@@ -114,6 +112,8 @@ def execute(
             default_values,
             {
                 "prediction_directory_path": prediction_directory_path,
+                "predict_perturbations": _load_predict_perturbations(data_directory_path, context.is_local),
+                "genes_to_predict": _load_genes_to_predict(data_directory_path),
                 # hvg_gene.csv
                 # read genes_to_predict.csv ->
                 #   generated from taking 600 random genes which are
@@ -197,9 +197,14 @@ def _validate_prediction_files(
 
 def _load_predict_perturbations(
     data_directory_path: str,
+    is_local: bool,
 ) -> List[str]:
-    txt_file_path = os.path.join(data_directory_path, "predict_perturbations.txt")
-    return pandas.read_csv(txt_file_path, header=None)[0].tolist()
+    if is_local:
+        perturbations_to_score_file_path = os.path.join(data_directory_path, "program_proportion_local_gtruth.csv")
+        return pandas.read_csv(perturbations_to_score_file_path, usecols=["gene"])["gene"].tolist()
+    else:
+        txt_file_path = os.path.join(data_directory_path, "predict_perturbations.txt")
+        return pandas.read_csv(txt_file_path, header=None)[0].tolist()
 
 
 def _load_genes_to_predict(
