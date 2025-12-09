@@ -170,7 +170,7 @@ def score(
             prediction_mask = prediction_adata.obs["gene"] == perturbation
 
             gtruth_X = _as_numpy_array(gtruth_adata[gtruth_mask, hvg_mask].X)
-            pred_X = _as_numpy_array(prediction_adata[prediction_mask].X)
+            pred_X = _as_numpy_array(prediction_adata[prediction_mask, gtruth_adata[:, hvg_mask].var_names].X)
 
         with tracer.log("Compute pearson(X)"):
             person_value = _pearson(

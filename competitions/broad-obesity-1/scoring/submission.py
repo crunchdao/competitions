@@ -18,7 +18,6 @@ def check(
     submission_files: List[File],
     model_files: List[File],
 ):
-    print(submission_files)
     with tracer.log("Finding report file"):
         report_md_file_path = "Method description.md"
         report_md_file = _find_file_by_path(submission_files, report_md_file_path)
