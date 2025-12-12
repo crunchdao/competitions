@@ -116,6 +116,7 @@ def execute(
     default_values = {
         "data_directory_path": data_directory_path,
         "model_directory_path": model_directory_path,
+        "embargo": EMBARGO,
     }
 
     def train(
@@ -227,11 +228,6 @@ def _load_train_data(
             "X",
             is_local,
         ),
-        # columns=[ # TODO remove this test
-        #     "id",
-        #     "moon",
-        #     *[f"Feature_{x}" for x in range(1, 10)]
-        # ],
         filters=filters,
         engine="pyarrow",
     )
@@ -266,11 +262,6 @@ def _load_test_data(
             "X",
             is_local,
         ),
-        # columns=[ # TODO remove this test
-        #     "id",
-        #     "moon",
-        #     *[f"Feature_{x}" for x in range(1, 10)]
-        # ],
         filters=[moon_filter],
         engine="pyarrow",
     )
