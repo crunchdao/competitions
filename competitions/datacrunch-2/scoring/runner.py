@@ -71,7 +71,7 @@ def run(
 
     for index, moon in enumerate(moons):
         train, forced_train = False, False
-        if train_frequency != 0 and index % train_frequency == 0:
+        if train_frequency != 0 and moon % train_frequency == 0:
             train = True
         elif index == 0 and not context.has_model:
             train = True
