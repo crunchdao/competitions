@@ -247,11 +247,16 @@ def compare(
 crunch organizer <competition name> test leaderboard rank \
     --scores-file <score file> \
     --rank-pass <"PRE_DUPLICATE" or "FINAL"> \
+    --target-name <target name> \
     --shuffle
 ```
 
 > [!NOTE]
 > To ensure the ranking function is deterministic, it is recommended to use the `--shuffle` option.
+
+> [!NOTE]
+> If `--target-name` is not specified, the primary target will be used. <br />
+> Only the metrics of the target will be given to the function.
 
 > [!WARNING]
 > During the `PRE_DUPLICATE` pass, `rewardable` is always set to `false`.
@@ -296,13 +301,15 @@ import numpy
 import scipy.stats
 
 def rank(
-    target_and_metrics: list[tuple[Target, list[Metric]]],
+    target: Target,
+    metrics: list[Metric],
     projects: list[RankableProject],
     rank_pass: RankPass
 ) -> list[RankedProject]:
     """
     Parameters:
-        target_and_metrics: List of targets and metrics that can be used for ranking.
+        target: Target which is gonna be ranked.
+        metrics: The metrics is attached to the target.
         projects: List of projects to rank.
         rank_pass: Current ranking pass.
 
