@@ -8,5 +8,6 @@
     ],
     "language": "PYTHON",
     "notebook": true,
-    "entrypoint": "baseline.ipynb"
+    "entrypoint": "baseline.ipynb",
+    "kaggleUrl": "https://www.kaggle.com/code/crunchdao/structural-break-open-benchmark-baseline"
 }
