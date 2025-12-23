@@ -41,6 +41,9 @@ def check(
         content = report_md_file.text
         assert content is not None  # should not happen
 
+        # Windows line ending is breaking on the server?
+        content = content.replace("\r", "")
+
     with tracer.log("Ensure only ASCII"):
         if not content.isascii():
             raise ParticipantVisibleError(f"`{report_md_file_path}` must contain only ASCII characters.")
