@@ -15,6 +15,7 @@
         }
     ],
     "language": "R",
+    "usage": "SUBMISSION",
     "notebook": true,
     "deprecated": true,
     "entrypoint": "r_example.ipynb"

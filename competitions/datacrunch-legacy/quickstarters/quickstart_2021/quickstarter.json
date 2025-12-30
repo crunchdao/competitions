@@ -11,6 +11,7 @@
         }
     ],
     "language": "PYTHON",
+    "usage": "SUBMISSION",
     "notebook": true,
     "deprecated": true,
     "entrypoint": "quickstart_2021.ipynb"

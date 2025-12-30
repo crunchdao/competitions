@@ -34,6 +34,13 @@
                 "R"
             ]
         },
+        "usage": {
+            "type": "string",
+            "enum": [
+                "SUBMISSION",
+                "EXPLORATION"
+            ]
+        },
         "deprecated": {
             "type": "boolean",
             "default": false
@@ -60,6 +67,7 @@
         "title",
         "authors",
         "language",
+        "usage",
         "notebook",
         "entrypoint"
     ],

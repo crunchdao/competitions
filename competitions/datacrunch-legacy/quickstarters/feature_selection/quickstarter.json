@@ -15,6 +15,7 @@
         }
     ],
     "language": "PYTHON",
+    "usage": "SUBMISSION",
     "notebook": true,
     "deprecated": true,
     "entrypoint": "feature_selection.ipynb"

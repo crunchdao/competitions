@@ -7,6 +7,7 @@
         }
     ],
     "language": "PYTHON",
+    "usage": "SUBMISSION",
     "notebook": true,
     "entrypoint": "mlxtend_sharpbased_loss_reg.ipynb"
 }

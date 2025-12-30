@@ -11,6 +11,7 @@
         }
     ],
     "language": "PYTHON",
+    "usage": "EXPLORATION",
     "notebook": true,
     "entrypoint": "advanced_exploratory_data_analysis.ipynb"
 }

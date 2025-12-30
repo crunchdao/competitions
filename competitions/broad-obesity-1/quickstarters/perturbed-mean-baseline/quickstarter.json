@@ -6,6 +6,7 @@
         }
     ],
     "language": "PYTHON",
+    "usage": "SUBMISSION",
     "notebook": true,
     "entrypoint": "perturbed-mean-baseline.ipynb",
     "kaggleUrl": "https://www.kaggle.com/code/crunchdao/broad-obesity-1-perturbed-mean-baseline"

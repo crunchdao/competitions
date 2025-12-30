@@ -6,6 +6,7 @@
         }
     ],
     "language": "PYTHON",
+    "usage": "SUBMISSION",
     "notebook": true,
     "entrypoint": "supervised_baseline.ipynb"
 }

@@ -15,6 +15,7 @@
         }
     ],
     "language": "PYTHON",
+    "usage": "EXPLORATION",
     "notebook": true,
     "deprecated": true,
     "entrypoint": "cross_validation.ipynb"
