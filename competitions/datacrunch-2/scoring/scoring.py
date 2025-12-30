@@ -156,7 +156,7 @@ def _load_moons(
             moons.extend(splits["reduced_cloud"])
         else:
             moons.extend(splits["oos_private"])
-            moons.extend(splits["test"])
+            moons.extend(splits["live_to_predict"])
 
     return moons
 
