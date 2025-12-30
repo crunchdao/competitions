@@ -1,0 +1,13 @@
+{
+    "title": "Financial EDA Deep Dive",
+    "authors": [
+        {
+            "name": "Xavier Gilbert",
+            "link": "https://github.com/xaviergilbert"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "EXPLORATION",
+    "notebook": true,
+    "entrypoint": "financial-eda-deep-dive.ipynb"
+}
