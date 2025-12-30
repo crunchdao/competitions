@@ -118,10 +118,10 @@ def score(
             )\
             .fillna(0)
 
-        try:
-            score_value = pearson.mean() / pearson.std()
-        except ZeroDivisionError:
-            score_value = 0
+        if len(pearson) > 0:
+            score_value = pearson.iloc[-1]
+        else:
+            raise ValueError("Error in score computation: len(pearson) == 0")
 
     return {
         score_metric.id: ScoredMetric(score_value, []),
