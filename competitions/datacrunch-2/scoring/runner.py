@@ -63,8 +63,10 @@ def run(
     elif context.is_submission_phase:
         moons.extend(splits["reduced_cloud"])
     else:
-        moons.extend(splits["oos_private"])
-        moons.extend(splits["test"])
+        if context.is_first_time:
+            moons.extend(splits["oos_private"])
+
+        moons.extend(splits["live_to_predict"])
 
     predictions: List[pandas.DataFrame] = []
     prediction_file_path = os.path.join(prediction_directory_path, "prediction.parquet")

@@ -24,6 +24,7 @@ def check(
     prediction_directory_path: str,
     data_directory_path: str,
     phase_type: PhaseType,
+    chain_height: int,
 ):
     prediction = _load_prediction(prediction_directory_path)
 
@@ -63,7 +64,8 @@ def check(
 
     moons = _load_moons(
         data_directory_path,
-        is_submission_phase=phase_type == PhaseType.SUBMISSION,
+        phase_type,
+        chain_height,
     )
 
     with tracer.log("Check for moons"):
@@ -118,10 +120,10 @@ def score(
             )\
             .fillna(0)
 
-        try:
-            score_value = pearson.mean() / pearson.std()
-        except ZeroDivisionError:
-            score_value = 0
+        if not len(pearson):
+            raise ValueError("Error in score computation: len(pearson) == 0")
+
+        score_value = pearson.iloc[-1]
 
     return {
         score_metric.id: ScoredMetric(score_value, []),
@@ -141,7 +143,8 @@ def _find_metric_by_name(
 
 def _load_moons(
     data_directory_path: str,
-    is_submission_phase: bool,
+    phase_type: PhaseType,
+    chain_height: int,
 ) -> List[int]:
     path = os.path.join(data_directory_path, "moons_split.json")
 
@@ -151,12 +154,13 @@ def _load_moons(
 
         moons = []
 
-        if is_submission_phase:
-            # moons.extend(splits["reduced_local"])
+        if phase_type == PhaseType.SUBMISSION:
             moons.extend(splits["reduced_cloud"])
         else:
-            moons.extend(splits["oos_private"])
-            moons.extend(splits["test"])
+            if chain_height == phase_type.first_chain_height():
+                moons.extend(splits["oos_private"])
+
+            moons.extend(splits["live_to_predict"])
 
     return moons
 
