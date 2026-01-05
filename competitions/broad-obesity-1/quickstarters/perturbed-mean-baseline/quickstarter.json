@@ -2,7 +2,8 @@
     "title": "Perturbed Mean Baseline",
     "authors": [
         {
-            "name": "The Broad Team"
+            "name": "The Eric and Wendy Schmidt Center Team at the Broad Institute",
+            "link": "https://www.broadinstitute.org/"
         }
     ],
     "language": "PYTHON",
