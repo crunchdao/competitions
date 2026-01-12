@@ -55,12 +55,12 @@ def check(
         if replaced.isna().any():
             raise ParticipantVisibleError("Prediction must not contain infinite values")
 
-    with tracer.log("Check for [-1, 1]"):
-        has_less = (prediction["prediction"] < -1).any()
-        has_greater = (prediction["prediction"] > 1).any()
+    with tracer.log("Check for [-10, 10]"):
+        has_less = (prediction["prediction"] < -10).any()
+        has_greater = (prediction["prediction"] > 10).any()
 
         if has_less or has_greater:
-            raise ParticipantVisibleError("Prediction must be between -1.0 and 1.0")
+            raise ParticipantVisibleError("Prediction must be between -10.0 and 10.0")
 
     moons = _load_moons(
         data_directory_path,
