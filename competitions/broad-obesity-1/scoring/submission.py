@@ -23,7 +23,14 @@ def check(
         report_md_file = _find_file_by_path(submission_files, report_md_file_path)
 
         if report_md_file is None:
-            raise ParticipantVisibleError(f"Missing `{report_md_file_path}` file.")
+            is_in_model_files = _find_file_by_path(model_files, report_md_file_path)
+
+            if is_in_model_files:
+                message = f"Missing `{report_md_file_path}` file in the submission, it must not be included in the model files."
+            else:
+                message = f"Missing `{report_md_file_path}` file."
+
+            raise ParticipantVisibleError(message)
 
         report_md_file_path = report_md_file.path
 
