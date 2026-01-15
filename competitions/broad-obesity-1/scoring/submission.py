@@ -60,7 +60,7 @@ def check(
 
         for section in sections:
             matches = re.findall(
-                r"^# *" + section + "$",
+                r"^#+ *" + section + "$",
                 content,
                 flags=re.IGNORECASE | re.MULTILINE,
             )
