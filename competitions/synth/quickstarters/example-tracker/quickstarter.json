@@ -1,0 +1,13 @@
+{
+    "title": "Example Tracker",
+    "authors": [
+        {
+            "name": "CrunchDAO",
+            "link": "https://github.com/crunchdao"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "https://github.com/crunchdao/crunch-synth/blob/master/crunch_synth/examples/exampletracker.ipynb"
+}
