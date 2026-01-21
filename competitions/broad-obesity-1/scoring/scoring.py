@@ -131,6 +131,21 @@ def check(
             if not pandas.api.types.is_numeric_dtype(proportions[column_name].values):
                 raise ParticipantVisibleError(f"predict_program_proportion: Found non-numeric values for column `{column_name}`")
 
+        with tracer.log("Ensure lipo <= adipo"):
+            less_than_condition = (proportions["lipo"] <= proportions["adipo"]).all()
+
+            if not less_than_condition:
+                raise ParticipantVisibleError(f"predict_program_proportion: lipo should be a subset of adipo (lipo <= adipo)")
+
+        with tracer.log("Ensure pre_adipo + adipo + other = 1"):
+            tolerance = 0.001
+
+            sum = proportions["pre_adipo"] + proportions["adipo"] + proportions["other"]
+            equals_to_1_condition = (numpy.isclose(sum, 1, atol=tolerance)).all()
+
+            if not equals_to_1_condition:
+                raise ParticipantVisibleError(f"predict_program_proportion: (pre_adipo + adipo + other) must be equals to 1 (tolerance {tolerance})")
+
 
 def score(
     prediction_directory_path: str,
