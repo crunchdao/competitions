@@ -141,10 +141,10 @@ def check(
             tolerance = 0.001
 
             sum = proportions["pre_adipo"] + proportions["adipo"] + proportions["other"]
-            equals_to_1_condition = (numpy.isclose(sum, 1, atol=tolerance)).all()
+            equal_to_1_condition = (numpy.isclose(sum, 1, atol=tolerance)).all()
 
-            if not equals_to_1_condition:
-                raise ParticipantVisibleError(f"predict_program_proportion: (pre_adipo + adipo + other) must be equals to 1 (tolerance {tolerance})")
+            if not equal_to_1_condition:
+                raise ParticipantVisibleError(f"predict_program_proportion: (pre_adipo + adipo + other) must be equal to 1 (tolerance {tolerance})")
 
 
 def score(
