@@ -1,0 +1,13 @@
+{
+    "title": "Mean Reversion Attacker",
+    "authors": [
+        {
+            "name": "Peter COTTON",
+            "link": "https://github.com/microprediction"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "mean-reversion-attacker.ipynb"
+}

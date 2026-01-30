@@ -1,0 +1,13 @@
+{
+    "title": "QuickStarter Random Forest",
+    "authors": [
+        {
+            "name": "Zoe Mavroeidi",
+            "link": "https://github.com/zoe-mav"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "quickstarter-random-forest.ipynb"
+}

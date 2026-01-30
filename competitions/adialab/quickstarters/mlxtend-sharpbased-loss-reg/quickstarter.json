@@ -1,0 +1,13 @@
+{
+    "title": "mlxtend Sharpbased Loss Reg",
+    "authors": [
+        {
+            "name": "Matteo Manzi",
+            "link": "https://github.com/matteoettam09"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "mlxtend-sharpbased-loss-reg.ipynb"
+}

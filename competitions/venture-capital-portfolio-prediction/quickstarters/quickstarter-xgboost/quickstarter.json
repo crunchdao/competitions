@@ -1,0 +1,17 @@
+{
+    "title": "QuickStarter xgboost",
+    "authors": [
+        {
+            "name": "Zoe Mavroeidi",
+            "link": "https://github.com/zoe-mav"
+        },
+        {
+            "name": "Jean Herelle",
+            "link": "https://github.com/jeheran"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "quickstarter-xgboost.ipynb"
+}

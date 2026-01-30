@@ -1,0 +1,13 @@
+{
+    "title": "QuickStarter Notebook Master 2.0",
+    "authors": [
+        {
+            "name": "Matteo Manzi",
+            "link": "https://github.com/matteoettam09"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "quickstarter-notebook-master-2-0.ipynb"
+}

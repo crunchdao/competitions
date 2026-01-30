@@ -1,0 +1,17 @@
+{
+    "title": "Advanced Exploratory Data Analysis",
+    "authors": [
+        {
+            "name": "Jean Herelle",
+            "link": "https://github.com/jeheran"
+        },
+        {
+            "name": "Matteo Manzi",
+            "link": "https://github.com/matteoettam09"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "EXPLORATION",
+    "notebook": true,
+    "entrypoint": "advanced-exploratory-data-analysis.ipynb"
+}
