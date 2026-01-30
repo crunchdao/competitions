@@ -2,6 +2,7 @@ import json
 import os
 import typing
 import urllib.parse
+from collections import defaultdict
 
 import click
 import jsonschema
@@ -64,7 +65,6 @@ def _validate_directories(
     schema: dict,
     root: str,
     items: typing.List[typing.Dict],
-    extra_properties: typing.Dict[str, typing.Any]
 ):
     root = os.path.join(root, "quickstarters")
     if not os.path.exists(root):
@@ -86,21 +86,18 @@ def _validate_directories(
         else:
             items.append(quickstarter_json)
             quickstarter_json["name"] = quickstarter_root_name
-            quickstarter_json.update(extra_properties)
 
     return success
 
 
 @click.command()
 @click.option("--competition-root", default="./competitions/")
-@click.option("--generic-root", default="./generic/")
 @click.option("--api-base-url", envvar="API_BASE_URL", default="https://api.hub.crunchdao.com")
 @click.option("--contact-api", default=False)
 @click.option("--api-key", envvar="CRUNCHDAO_API_KEY", default=None)
 @click.option("--debug", is_flag=True)
 def cli(
     competition_root: str,
-    generic_root: str,
     # ---
     api_base_url: str,
     contact_api: str,
@@ -109,7 +106,7 @@ def cli(
     debug: bool,
 ):
     success = True
-    items = []
+    grouped_by_competition = defaultdict(list)
 
     with open(SCHEMA_PATH) as fd:
         schema = json.load(fd)
@@ -119,24 +116,12 @@ def cli(
         if not os.path.isdir(competition_name_root):
             continue
 
-        props = {
-            "competitionName": competition_name
-        }
-
-        if not _validate_directories(schema, competition_name_root, items, props):
+        items = []
+        if not _validate_directories(schema, competition_name_root, items):
             success = False
 
-    for competition_format in ["TIMESERIES", "DAG", "STREAM", "SPACIAL", "UNSTRUCTURED"]:
-        competition_format_root = os.path.join(generic_root, competition_format.lower())
-        if not os.path.isdir(competition_format_root):
-            continue
-
-        props = {
-            "competitionFormat": competition_format
-        }
-
-        if not _validate_directories(schema, competition_format_root, items, props):
-            success = False
+        for item in items:
+            grouped_by_competition[competition_name].append(item)
 
     if not success:
         exit(1)
@@ -144,27 +129,31 @@ def cli(
     if debug:
         print(json.dumps(items, indent=4))
 
-    if contact_api:
-        url = urllib.parse.urljoin(api_base_url, "/v1/quickstarters/~")
+    for competition_name, quickstarters in grouped_by_competition.items():
+        print(f"{competition_name}: found {len(quickstarters)}")
 
-        response = requests.post(
-            url,
-            headers={
-                "Authorization": f"API-Key {api_key}"
-            },
-            json={
-                "quickstarters": items
-            }
-        )
+        if contact_api:
+            url = urllib.parse.urljoin(api_base_url, f"/v2/competitions/{competition_name}/quickstarters/~")
 
-        if response.status_code != 201:
-            print(f"api: {response}")
-            print()
-            print_tab(json.dumps(response.json(), indent=4))
-            print()
-            exit(1)
+            response = requests.post(
+                url,
+                headers={
+                    "Authorization": f"API-Key {api_key}"
+                },
+                json={
+                    "quickstarters": quickstarters,
+                },
+            )
 
-        print(f"api: {response.json()}")
+            if response.status_code != 201:
+                print(f"{competition_name}: api: {response}: ")
+                print_tab(json.dumps(response.json(), indent=4))
+                success = False
+            else:
+                print(f"{competition_name}: delta: {response.json()}")
+
+    if not success:
+        exit(1)
 
 
 if __name__ == '__main__':
