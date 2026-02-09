@@ -115,15 +115,15 @@ def score(
             if len(gene_panel_remaining) < num_for_filling:
                 print('error: not enough gene from the panel to fill in')
 
+        # for index in tqdm(range(n_simulation)):
         for index in tracer.loop(range(n_simulation), action=lambda x: f"Simulate random gene lists: {x + 1}/{n_simulation}"):
-            # for index in tqdm(range(n_simulation)):
-            ranomizer = random.Random(42 + index)
+            randomizer = random.Random(42 + index)
 
             # Randomly sample 'current_list_size' genes from the current set
-            random_genes = ranomizer.sample(full_gene_list, current_list_size)
+            random_genes = randomizer.sample(full_gene_list, current_list_size)
 
             # Randomly fill in genes from the Gene panel
-            random_genes_fill = ranomizer.sample(gene_panel_remaining, num_for_filling)
+            random_genes_fill = randomizer.sample(gene_panel_remaining, num_for_filling)
             random_genes = random_genes + random_genes_fill
 
             # Get the k accuracies for this random sample
@@ -155,7 +155,7 @@ def _get_gene_list_accuracies(
     k=3
 ):
     from sklearn.linear_model import LogisticRegression
-    from sklearn.model_selection import cross_val_score
+    from sklearn.model_selection import KFold, cross_val_score
     from sklearn.preprocessing import LabelEncoder
 
     # Filter genes that actually exist in the adata
@@ -178,6 +178,7 @@ def _get_gene_list_accuracies(
 
     # Perform k-fold cross validation
     # This returns an array of k scores
-    accuracies = cross_val_score(clf, X, y, cv=k)
+    kf = KFold(n_splits=k, shuffle=True, random_state=42)
+    accuracies = cross_val_score(clf, X, y, cv=kf)
 
     return accuracies
