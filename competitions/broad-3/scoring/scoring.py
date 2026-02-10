@@ -117,7 +117,8 @@ def score(
 
         # for index in tqdm(range(n_simulation)):
         for index in tracer.loop(range(n_simulation), action=lambda x: f"Simulate random gene lists: {x + 1}/{n_simulation}"):
-            randomizer = random.Random(42 + index)
+            seed = 42 + index
+            randomizer = random.Random(seed)
 
             # Randomly sample 'current_list_size' genes from the current set
             random_genes = randomizer.sample(full_gene_list, current_list_size)
@@ -127,7 +128,7 @@ def score(
             random_genes = random_genes + random_genes_fill
 
             # Get the k accuracies for this random sample
-            k_accuracies = _get_gene_list_accuracies(adata, random_genes, k=k)
+            k_accuracies = _get_gene_list_accuracies(adata, random_genes, seed, k=k)
 
             # Store them (flattening the k-folds into the total list)
             all_sim_accuracies.extend(k_accuracies)
@@ -152,6 +153,7 @@ def score(
 def _get_gene_list_accuracies(
     adata: anndata.AnnData,
     gene_list: List[str],
+    seed: int,
     k=3
 ):
     from sklearn.linear_model import LogisticRegression
@@ -178,7 +180,7 @@ def _get_gene_list_accuracies(
 
     # Perform k-fold cross validation
     # This returns an array of k scores
-    kf = KFold(n_splits=k, shuffle=True, random_state=42)
-    accuracies = cross_val_score(clf, X, y, cv=kf)
+    kf = KFold(n_splits=k, shuffle=True, random_state=seed)
+    accuracies = cross_val_score(clf, X, y, cv=kf, pre_dispatch=1, n_jobs=1)
 
     return accuracies
