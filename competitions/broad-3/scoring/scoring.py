@@ -176,7 +176,7 @@ def _get_gene_list_accuracies(
 
     # Initialize Logistic Regression
     # We use 'liblinear' for smaller datasets or 'lbfgs' for larger ones
-    clf = LogisticRegression(max_iter=100)  # previous 100
+    clf = LogisticRegression(max_iter=200)  # previous 100
 
     # Perform k-fold cross validation
     # This returns an array of k scores
