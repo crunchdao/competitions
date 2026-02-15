@@ -77,7 +77,7 @@ def check(
         if difference:
             raise ParticipantVisibleError(f"Moons do not match: {difference}")
 
-    y = _load_y(data_directory_path)
+    y = _load_y(data_directory_path, PhaseType.SUBMISSION)
     with tracer.log("Check for ids"):
         for moon, group in tracer.loop(prediction.groupby("moon")["id"], lambda x: f"Checking moon {x[0]}"):
             y_ids = y.loc[y["moon"] == moon, "id"]
@@ -97,17 +97,17 @@ def check(
 def score(
     prediction_directory_path: str,
     data_directory_path: str,
+    phase_type: PhaseType,
     target_and_metrics: List[Tuple[Target, List[Metric]]],
 ):
     _, metrics = target_and_metrics[0]
     score_metric = _find_metric_by_name(metrics, "score")
 
     prediction = _load_prediction(prediction_directory_path)
-    y = _load_y(data_directory_path)
+    y = _load_y(data_directory_path, phase_type)
 
     with tracer.log("Merge prediction with y"):
         merged = y.merge(prediction, on=["moon", "id"], how="right")
-        # merged["prediction"] = merged["target"] * 0.999
 
     with tracer.log("Compute pearson"):
         pearson = merged.groupby("moon")\
@@ -176,8 +176,12 @@ def _load_prediction(
 
 def _load_y(
     data_directory_path: str,
+    phase_type: PhaseType,
 ) -> pandas.DataFrame:
-    path = os.path.join(data_directory_path, "y.parquet")
+    if phase_type == PhaseType.SUBMISSION:
+        path = os.path.join(data_directory_path, "y.parquet")
+    else:
+        path = os.path.join(data_directory_path, "y.resolved.parquet")
 
     with tracer.log("Loading y"):
         return pandas.read_parquet(path)
