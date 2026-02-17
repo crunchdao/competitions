@@ -17,6 +17,10 @@
   - [Rank Function](#rank-function)
     - [Score File Format](#score-file-format)
     - [API](#api-4)
+- [Reward Module](#reward-module)
+  - [Compute Bounties Function](#compute-bounties-function)
+    - [Score File Format](#score-file-format-1)
+    - [API](#api-5)
 
 # CLI
 
@@ -321,3 +325,86 @@ def rank(
 ```
 
 [There is an example implementation available for `broad-2`.](../../competitions/broad-2/scoring/scoring.py)
+
+
+# Reward Module
+
+The code must be in the file named `reward.py`.
+
+## Compute Bounties Function
+
+```bash
+crunch organizer <competition name> test reward compute-bounties \
+    --scores-file <score file> \
+    --target-name <target name> \
+    --granted-amount <amount ignoring currency> \
+    --shuffle
+```
+
+> [!NOTE]
+> To ensure the ranking function is deterministic, it is recommended to use the `--shuffle` option.
+
+> [!NOTE]
+> If `--target-name` is not specified, the primary target will be used. <br />
+> Only the metrics of the target will be given to the function.
+
+### Score File Format
+
+The score file must use the following schema:
+
+```typescript
+type RewardableProject = {
+    /** Project ID. */
+    id: number; 
+
+    /** Current project group. Format: `(user|team)-(id)` */
+    group: string;
+
+    /* Is the project rewardable? (only if not a duplicate and deterministic and ...) */
+    rewardable: boolean;
+
+    /* Scored metrics. */
+    metrics: Array<RewardableProjectMetric>;
+}
+
+type RewardableProjectMetric = {
+    /** Metric ID. */
+    id: number;
+
+    /** Scored value. */
+    score: number;
+}
+
+type Root = Array<RewardableProject>;
+```
+
+### API
+
+```python
+from crunch.api import Target, Metric
+from crunch.unstructured import RewardableProject, RewardedProject
+
+import numpy
+import scipy.stats
+
+def rank(
+    target: Target,
+    metrics: list[Metric],
+    projects: list[RewardableProject],
+    granted_amount: float,
+) -> list[RewardedProject]:
+    """
+    Parameters:
+        target: Target which is gonna be ranked.
+        metrics: The metrics is attached to the target.
+        projects: List of projects to rank.
+        granted_amount: Total amount of the bounty.
+
+    Return:
+        The rewarded projects.
+    """
+
+    return []
+```
+
+[There is an example implementation available for `datacrunch-2`.](../../competitions/datacrunch-2/scoring/reward.py)

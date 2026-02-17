@@ -286,7 +286,8 @@ resources/
 .crunchdao/
 
 **/scoring/*
+!**/scoring/reward.py
+!**/scoring/runner.py
 !**/scoring/submission.py
 !**/scoring/scoring.py
 !**/scoring/leaderboard.py
-!**/scoring/runner.py
