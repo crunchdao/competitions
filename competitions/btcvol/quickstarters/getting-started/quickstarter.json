@@ -1,0 +1,13 @@
+{
+    "title": "Getting Started",
+    "authors": [
+        {
+            "name": "Jeremy Berros",
+            "link": "https://github.com/jberros"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "https://github.com/jberros/crunch-btcdvol/blob/main/notebooks/GETTING_STARTED.ipynb"
+}
