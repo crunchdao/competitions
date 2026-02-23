@@ -46,7 +46,9 @@ def check(
 
     with tracer.log("Getting content"):
         content = report_md_file.text
-        assert content is not None  # should not happen
+
+        if content is None:
+            raise ParticipantVisibleError(f"`{report_md_file_path}` is not being detected as a regular text file.")
 
         # Windows line ending is breaking on the server?
         content = content.replace("\r", "")
