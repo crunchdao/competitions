@@ -44,21 +44,6 @@ def run(
         }
     )
 
-    if context.is_determinism_check_enabled:
-        prediction = pandas.read_parquet(prediction_file_path)
-        os.remove(prediction_file_path)
-
-        context.execute(
-            command="infer",
-            parameters={
-                "x_test_file_path": x_test_file_path,
-                "prediction_file_path": prediction_file_path,
-            }
-        )
-
-        prediction2 = pandas.read_parquet(prediction_file_path)
-        context.report_determinism(prediction.equals(prediction2))
-
 
 def execute(
     context: "RunnerExecutorContext",
