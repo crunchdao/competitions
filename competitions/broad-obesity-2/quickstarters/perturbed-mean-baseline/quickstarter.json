@@ -1,0 +1,13 @@
+{
+    "title": "Perturbed Mean Baseline",
+    "authors": [
+        {
+            "name": "The Eric and Wendy Schmidt Center Team at the Broad Institute",
+            "link": "https://www.broadinstitute.org/"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "perturbed-mean-baseline.ipynb"
+}
