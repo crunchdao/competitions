@@ -12,6 +12,20 @@ if TYPE_CHECKING:
 PREDICTION_FILE_NAME = "prediction.parquet"
 
 
+def load_data(
+    data_directory_path: str,
+):
+    x_train = joblib.load(os.path.join(data_directory_path, "X_train.pickle"))
+    y_train = joblib.load(os.path.join(data_directory_path, "y_train.pickle"))
+    x_test = joblib.load(os.path.join(data_directory_path, "X_test_reduced.pickle"))
+
+    return (
+        x_train,
+        y_train,
+        x_test,
+    )
+
+
 def run(
     context: "RunnerContext",
     data_directory_path: str,
