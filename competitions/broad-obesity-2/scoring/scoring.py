@@ -171,7 +171,6 @@ def score(
 
     with tracer.log("Extract unstructured annotation"):
         hvg_mask = gtruth_adata.uns["scoring_gene_mask"]
-        perturbed_centroid = gtruth_adata.uns["perturbed_centroid_train"][hvg_mask]
 
     person_values = []
     mmd_values = []
@@ -180,7 +179,14 @@ def score(
     for perturbation in tracer.loop(perturbations, "Scoring gene: {value}"):
 
         with tracer.log("Filter the slice"):
-            hvg_mask = gtruth_adata.uns["scoring_gene_mask"]
+            guide_elements = perturbation.split("+")
+            if len(guide_elements) == 1:
+                perturbed_centroid = gtruth_adata.uns["single_perturbed_centroid_train"][hvg_mask]
+            elif len(guide_elements) == 2:
+                perturbed_centroid = gtruth_adata.uns["double_perturbed_centroid_train"][hvg_mask]
+            else:
+                raise ValueError(f"Unexpected number of guides in perturbation: `{perturbation}`.")
+
             gtruth_mask = gtruth_adata.obs["gene"] == perturbation
             prediction_mask = prediction_adata.obs["gene"] == perturbation
 
