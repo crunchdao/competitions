@@ -106,6 +106,8 @@ def execute(
     ):
         infer_function = module.get_function("infer")
 
+        predict_genes = _load_predict_genes(data_directory_path)
+
         smart_call(
             infer_function,
             default_values,
@@ -114,7 +116,10 @@ def execute(
                 "prediction_h5ad_file_path": prediction_h5ad_file_path,
                 "program_proportion_csv_file_path": program_proportion_csv_file_path,
                 "predict_perturbations": _load_predict_perturbations(data_directory_path, context.is_local),
-                "predict_genes": _load_predict_genes(data_directory_path),
+                "predict_genes": predict_genes,
+
+                # deprecated, kept for compatibility
+                "genes_to_predict": predict_genes,
             }
         )
 
