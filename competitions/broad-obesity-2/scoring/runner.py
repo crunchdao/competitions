@@ -63,12 +63,12 @@ def run(
         }
     )
 
-    genes_to_predict = _load_genes_to_predict(data_directory_path)
+    predict_genes = _load_predict_genes(data_directory_path)
 
     prediction = scanpy.read_h5ad(prediction_h5ad_file_path)
     prediction = prediction[
         prediction.obs["gene"].isin(perturbations_to_score),
-        sorted(set(prediction.var_names) & set(genes_to_score), key=genes_to_predict.index) if genes_to_score else slice(None)
+        sorted(set(prediction.var_names) & set(genes_to_score), key=predict_genes.index) if genes_to_score else slice(None)
     ]
 
     prediction.write(prediction_h5ad_file_path)
@@ -114,7 +114,7 @@ def execute(
                 "prediction_h5ad_file_path": prediction_h5ad_file_path,
                 "program_proportion_csv_file_path": program_proportion_csv_file_path,
                 "predict_perturbations": _load_predict_perturbations(data_directory_path, context.is_local),
-                "genes_to_predict": _load_genes_to_predict(data_directory_path),
+                "predict_genes": _load_predict_genes(data_directory_path),
             }
         )
 
@@ -184,11 +184,11 @@ def _load_predict_perturbations(
         perturbations_to_score_file_path = os.path.join(data_directory_path, "program_proportion_local_gtruth.csv")
         return pandas.read_csv(perturbations_to_score_file_path, usecols=["gene"])["gene"].tolist()
     else:
-        txt_file_path = os.path.join(data_directory_path, "predict_perturbations.txt")
+        txt_file_path = os.path.join(data_directory_path, "predict_perturbations_2.txt")
         return pandas.read_csv(txt_file_path, header=None)[0].tolist()
 
 
-def _load_genes_to_predict(
+def _load_predict_genes(
     data_directory_path: str,
 ) -> List[str]:
     txt_file_path = os.path.join(data_directory_path, "predict_genes_2.txt")
