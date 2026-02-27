@@ -84,7 +84,7 @@ def check(
                         raise ParticipantVisibleError("There is an invalid number of lines (`.obs`) for a gene. Perhaps the wrong ones were predicted?")
 
     with tracer.log("Validating predict_program_proportion"):
-        data_columns = ["adipo", "pre_adipo", "lipo", "other"]
+        data_columns = ["adipo", "pre_adipo", "lipo", "other", "lipo_adipo"]
 
         with tracer.log("Load prediction"):
             proportions = pandas.read_csv(os.path.join(prediction_directory_path, PROGRAM_PROPORTION_FILE_NAME))
@@ -145,6 +145,15 @@ def check(
 
             if not equal_to_1_condition:
                 raise ParticipantVisibleError(f"predict_program_proportion: (pre_adipo + adipo + other) must be equal to 1 (tolerance {tolerance})")
+
+        with tracer.log("Ensure lipo_adipo = lipo / adipo"):
+            tolerance = 0.001
+
+            div = proportions["lipo"] / proportions["adipo"]
+            equal_to_lipo_adipo = (numpy.isclose(div, proportions["lipo_adipo"], atol=tolerance)).all()
+
+            if not equal_to_lipo_adipo:
+                raise ParticipantVisibleError(f"predict_program_proportion: lipo_adipo must be equal to lipo / adipo (tolerance {tolerance})")
 
 
 def score(
