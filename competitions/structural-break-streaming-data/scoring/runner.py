@@ -1,0 +1,275 @@
+import gc
+import os
+import time
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any, Iterator, List, Literal, Optional, Tuple, Union
+
+import numpy
+import pandas
+from crunch.container import GeneratorWrapper
+from crunch.utils import smart_call
+
+if TYPE_CHECKING:
+    from crunch.runner.unstructured import RunnerContext, RunnerExecutorContext, UserModule
+
+
+def load_data(
+    data_directory_path: str,
+):
+    x_train, y_train = _load_train(data_directory_path)
+
+    def load_x_test():
+        x_test, _ = _load_x_test(data_directory_path, True)
+        return x_test
+
+    return x_train, y_train, load_x_test
+
+
+def run(
+    context: "RunnerContext",
+    prediction_directory_path: str,
+):
+    if context.force_first_train:
+        context.execute(
+            command="train",
+        )
+
+    prediction_parquet_file_path = os.path.join(prediction_directory_path, "prediction.parquet")
+    prediction_duration_parquet_file_path = os.path.join(prediction_directory_path, "prediction.duration.parquet")
+
+    context.execute(
+        command="infer",
+        parameters={
+            "determinism_check": False,
+            "prediction_parquet_file_path": prediction_parquet_file_path,
+            "prediction_duration_parquet_file_path": prediction_duration_parquet_file_path,
+        }
+    )
+
+    prediction = pandas.read_parquet(prediction_parquet_file_path)
+
+    if context.is_determinism_check_enabled:
+        percentage = 0.3
+        tolerance = 1e-8
+
+        context.log(f"checking determinism by executing the inference again with {percentage * 100:.0f}% of the data (tolerance: {tolerance})")
+
+        prediction_determinism_parquet_file_path = os.path.join(prediction_directory_path, "prediction.determinism.parquet")
+
+        context.execute(
+            command="infer",
+            parameters={
+                "determinism_check": percentage,
+                "prediction_parquet_file_path": prediction_determinism_parquet_file_path,
+                "prediction_duration_parquet_file_path": None,
+            }
+        )
+
+        prediction2 = pandas.read_parquet(prediction_determinism_parquet_file_path)
+        os.unlink(prediction_determinism_parquet_file_path)
+
+        is_deterministic = numpy.allclose(prediction.loc[prediction2.index, "prediction"], prediction2["prediction"], atol=tolerance)
+        context.report_determinism(is_deterministic)
+
+
+def _aware_iterator(
+    dataset: pandas.DataFrame,
+) -> Tuple[Iterator[pandas.Series], List[timedelta]]:
+    real_iterator = iter(_to_points(dataset))
+
+    last_yield_time: Optional[float] = None
+    should_record = True
+
+    durations: List[timedelta] = []
+
+    dataset = None
+
+    class _Impl:
+        def __iter__(self):
+            return self
+
+        def __next__(self) -> float:
+            nonlocal last_yield_time, should_record
+
+            value = next(real_iterator, None)
+
+            if should_record and last_yield_time is not None:
+                duration = time.time() - last_yield_time
+                durations.append(timedelta(seconds=duration))
+
+            last_yield_time = time.time()
+
+            if value is None:
+                should_record = False
+                raise StopIteration
+
+            return value
+
+        def __str__(self):
+            return self.__repr__()
+
+        def __repr__(self):
+            return f"dataset_iterator"
+
+    return _Impl(), durations
+
+
+def execute(
+    context: "RunnerExecutorContext",
+    module: "UserModule",
+    data_directory_path: str,
+    model_directory_path: str,
+):
+    default_values = {
+        "data_directory_path": data_directory_path,
+        "model_directory_path": model_directory_path,
+    }
+
+    def train():
+        x_train = pandas.read_parquet(os.path.join(data_directory_path, "X_train.parquet"))
+        y_train = pandas.read_parquet(os.path.join(data_directory_path, "y_train.parquet"))["structural_breakpoint"]
+
+        context.trip_data_fuse()
+
+        train_function = module.get_function("train")
+
+        smart_call(
+            train_function,
+            default_values,
+            {
+                "x_train": x_train,
+                "X_train": x_train,
+                "y_train": y_train,
+            }
+        )
+
+    def infer(
+        determinism_check: Union[Literal[False], float],
+        prediction_parquet_file_path: str,
+        prediction_duration_parquet_file_path: Optional[str],
+    ):
+        x_test_name = "X_test.reduced.parquet" if context.is_local else "X_test.parquet"
+        x_test = pandas.read_parquet(os.path.join(data_directory_path, x_test_name))
+
+        datasets: List[Iterator[pandas.Series]] = []
+        dataset_durations: List[Tuple[int, List[timedelta]]] = []
+        dataset_ids: List[int] = []
+
+        for id, dataset in x_test.groupby(x_test.index.get_level_values("id")):
+            dataset.name = id
+
+            iterator, durations = _aware_iterator(dataset)
+
+            datasets.append(iterator)
+            dataset_durations.append((id, durations))
+            dataset_ids.append(id)
+
+        if determinism_check is not False:
+            determinism_slice = slice(None, int(len(datasets) * determinism_check))
+
+            datasets = datasets[determinism_slice]
+            dataset_ids = dataset_ids[determinism_slice]
+
+        del x_test
+        gc.collect()
+
+        context.trip_data_fuse()
+
+        infer_function = module.get_function("infer")
+
+        wrapper = GeneratorWrapper(
+            iter(datasets),
+            lambda datasets: smart_call(
+                infer_function,
+                default_values,
+                {
+                    "datasets": datasets,
+                    "X_test": datasets,
+                    "x_test": datasets,
+                },
+            ),
+            post_processor=_post_process_infer_yield_result,
+        )
+
+        collected_values, collected_durations = wrapper.collect(len(datasets))
+        prediction = pandas.DataFrame(
+            {
+                "prediction": collected_values,
+                "duration": collected_durations,
+            },
+            index=pandas.Index(dataset_ids, name="id")
+        )
+
+        prediction.to_parquet(prediction_parquet_file_path)
+
+        if prediction_duration_parquet_file_path is not None:
+            prediction_duration = pandas.DataFrame(
+                [
+                    (dataset_id, point_index, point_duration)
+                    for dataset_id, point_durations in dataset_durations
+                    for point_index, point_duration in enumerate(point_durations)
+                ],
+                columns=["dataset_id", "point_index", "duration"],
+            )
+
+            prediction_duration.to_parquet(prediction_duration_parquet_file_path)
+
+    return {
+        "train": train,
+        "infer": infer,
+    }
+
+
+def _load_train(data_directory_path: str):
+    x_train = pandas.read_parquet(os.path.join(data_directory_path, "X_train.parquet"))
+    y_train = pandas.read_parquet(os.path.join(data_directory_path, "y_train.parquet"))["structural_breakpoint"]
+
+    return x_train, y_train
+
+
+def _to_points(dataset: pandas.DataFrame) -> Iterator[pandas.Series]:
+    return dataset.itertuples(name="Point")
+
+
+def _load_x_test(data_directory_path: str, reduced: bool):
+    x_test_name = "X_test.reduced.parquet" if reduced else "X_test.parquet"
+    x_test = pandas.read_parquet(os.path.join(data_directory_path, x_test_name))
+
+    datasets, dataset_ids = [], []
+    for id, dataset in x_test.groupby(x_test.index.get_level_values("id")):
+        dataset.name = id
+
+        datasets.append(_to_points(dataset))
+        dataset_ids.append(id)
+
+    del x_test
+
+    return datasets, dataset_ids
+
+
+def _post_process_infer_yield_result(result: Any) -> Any:
+    if isinstance(result, pandas.Series):
+        if len(result) != 1:
+            raise ValueError(f"a `pandas.Series` is only allowed if it has a single value, but got a length of {len(result)}")
+
+        result = next(iter(result))
+
+    elif isinstance(result, numpy.ndarray):
+        if result.shape != (1,):
+            raise ValueError(f"a `numpy.ndarray` is only allowed if it has a single dimension and a single value, but got a shape of {result.shape}")
+
+        result = result[0]
+
+    elif isinstance(result, list):
+        if len(result) != 1:
+            raise ValueError(f"a `list` is only allowed if it has a single value, but got a length of {len(result)}")
+
+        result = result[0]
+
+    if all(not numpy.issubdtype(type(result), dtype) for dtype in [numpy.floating, numpy.integer, numpy.bool_]):
+        raise ValueError(f"value must be a float or an int or a bool, but got {type(result)}")
+
+    else:
+        result = float(result)
+
+    return result
