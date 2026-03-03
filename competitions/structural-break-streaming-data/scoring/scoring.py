@@ -25,7 +25,7 @@ def check(
 
     with tracer.log("Check for required columns"):
         difference = crunch.unstructured.utils.delta_message(
-            {'prediction'},
+            {"prediction", "duration"},
             set(prediction.columns),
         )
 
