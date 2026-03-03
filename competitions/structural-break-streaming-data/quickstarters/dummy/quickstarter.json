@@ -1,0 +1,13 @@
+{
+    "title": "Dummy",
+    "description": "Dummy",
+    "authors": [
+        {
+            "name": "CrunchDAO"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "dummy.ipynb"
+}
