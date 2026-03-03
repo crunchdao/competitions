@@ -80,8 +80,8 @@ def score(
 
     with tracer.log("Call roc_auc_score"):
         value = sklearn.metrics.roc_auc_score(
-            y_test,
-            prediction,
+            y_test["structural_breakpoint"],
+            prediction["prediction"],
         )
 
     return {
