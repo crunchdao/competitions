@@ -60,6 +60,16 @@ def check(
         content = content.replace("\r", "")
 
     with tracer.log("Ensure only ASCII"):
+        equivalences = {
+            "“": '"',
+            "”": '"',
+            "‘": "'",
+            "’": "'",
+        }
+
+        for non_ascii, ascii_equivalent in equivalences.items():
+            content = content.replace(non_ascii, ascii_equivalent)
+
         if not content.isascii():
             raise ParticipantVisibleError(f"`{report_md_file_path}` must contain only ASCII characters.")
 
