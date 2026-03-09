@@ -22,11 +22,17 @@ def check(
         report_md_file_path = "Method description.md"
         report_md_file = _find_file_by_path(submission_files, report_md_file_path)
 
+        report_md_file_named_with_dash = _find_file_by_path(submission_files, report_md_file_path.replace(" ", "-"))
+        report_md_file_named_with_underscore = _find_file_by_path(submission_files, report_md_file_path.replace(" ", "_"))
+        alternative_report_md_file = report_md_file_named_with_dash or report_md_file_named_with_underscore
+
         if report_md_file is None:
             is_in_model_files = _find_file_by_path(model_files, report_md_file_path)
 
             if is_in_model_files:
                 message = f"Missing `{report_md_file_path}` file in the submission, it must not be included in the model files."
+            elif alternative_report_md_file is not None:
+                message = f"Missing `{report_md_file_path}` file (with a space), but found `{alternative_report_md_file.path}`. Please rename it to `{report_md_file_path}`."
             else:
                 message = f"Missing `{report_md_file_path}` file."
 
