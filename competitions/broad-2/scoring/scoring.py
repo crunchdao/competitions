@@ -2,7 +2,7 @@ import os
 import typing
 
 import crunch
-import crunch.custom
+import crunch.unstructured
 import crunch.utils
 import numpy
 import pandas
@@ -31,7 +31,7 @@ def check(
         gene_names = set(gene_csv['gene_symbols'])
 
     with tracer.log("Check for required columns"):
-        difference = crunch.custom.utils.delta_message(
+        difference = crunch.unstructured.utils.delta_message(
             {'sample'} | gene_names,
             set(prediction.columns),
         )
@@ -40,7 +40,7 @@ def check(
             raise ParticipantVisibleError(f"Columns do not match: {difference}")
 
     with tracer.log("Check for missing samples"):
-        difference = crunch.custom.utils.delta_message(
+        difference = crunch.unstructured.utils.delta_message(
             set(target_names),
             set(prediction['sample'].unique()),
         )
@@ -66,7 +66,7 @@ def check(
             prediction_slice = prediction_slice.replace([-numpy.inf, numpy.inf], numpy.nan)
 
         with tracer.log("Check that all cell IDs are present in predictions"):
-            difference = crunch.custom.utils.delta_message(
+            difference = crunch.unstructured.utils.delta_message(
                 cell_ids,
                 set(prediction_slice.index),
             )
@@ -154,8 +154,8 @@ def score(
             target_predictions = None
 
         with tracer.log("Score prediction"):
-            cell_spearman_score = crunch.scoring.ScoredMetric(None, [])
-            gene_spearman_score = crunch.scoring.ScoredMetric(None, [])
+            cell_spearman_score = crunch.unstructured.ScoredMetric(None, [])
+            gene_spearman_score = crunch.unstructured.ScoredMetric(None, [])
 
             for region_id, cell_ids in tracer.loop(region_cell_mapping.groupby("region_id", observed=True), lambda x: f"Score region -> {x[0]}"):
                 cell_ids = set(cell_ids)
@@ -172,8 +172,8 @@ def score(
                 with tracer.log(f"Calling _spearman_gene_wise"):
                     region_spearman_gene = _spearman_gene_wise(region_prediction, region_y_test)
 
-                cell_spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman_cell, False))
-                gene_spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman_gene, False))
+                cell_spearman_score.details.append(crunch.unstructured.ScoredMetricDetail(region_id, region_spearman_cell, False))
+                gene_spearman_score.details.append(crunch.unstructured.ScoredMetricDetail(region_id, region_spearman_gene, False))
 
             _average_details(cell_spearman_metric, cell_spearman_score, scores)
             _average_details(gene_spearman_metric, gene_spearman_score, scores)
@@ -212,8 +212,8 @@ def _find_metric_by_name(
 
 def _average_details(
     metric: typing.Optional[crunch.api.Metric],
-    scored_metric: crunch.scoring.ScoredMetric,
-    scores: typing.Dict[int, crunch.scoring.ScoredMetric],
+    scored_metric: crunch.unstructured.ScoredMetric,
+    scores: typing.Dict[int, crunch.unstructured.ScoredMetric],
 ):
     if not metric:
         return
@@ -229,7 +229,7 @@ def _average_details(
 def _compute_virtual(
     metric: typing.Optional[crunch.api.Metric],
     metric_ids: typing.List[int],
-    scores: typing.Dict[int, crunch.scoring.ScoredMetric]
+    scores: typing.Dict[int, crunch.unstructured.ScoredMetric]
 ):
     if not metric:
         return
@@ -242,7 +242,7 @@ def _compute_virtual(
         if metric_id in metric_ids
     ])
 
-    scores[metric.id] = crunch.scoring.ScoredMetric(mean)
+    scores[metric.id] = crunch.unstructured.ScoredMetric(mean)
 
 
 def _spearman_cell_wise(

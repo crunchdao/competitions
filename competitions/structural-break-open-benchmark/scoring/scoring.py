@@ -5,7 +5,7 @@ import numpy
 import pandas
 import sklearn.metrics
 from crunch.api import Metric, Target
-from crunch.scoring import ScoredMetric
+from crunch.unstructured import ScoredMetric
 from crunch.unstructured.utils import delta_message
 from crunch.utils import Tracer
 

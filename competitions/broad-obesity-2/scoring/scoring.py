@@ -8,7 +8,7 @@ import numpy
 import pandas
 import scanpy
 import scipy.stats
-from crunch.scoring import ScoredMetric
+from crunch.unstructured import ScoredMetric
 from crunch.unstructured.utils import delta_message
 from numpy.typing import NDArray
 
@@ -17,7 +17,7 @@ PROGRAM_PROPORTION_FILE_NAME = "predict_program_proportion.csv"
 
 
 class ParticipantVisibleError(Exception):
-    """unstructured exception for errors related to participant visibility."""
+    """Custom exception for errors related to participant visibility."""
     pass
 
 
