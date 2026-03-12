@@ -6,7 +6,7 @@ import joblib
 import networkx
 import numpy
 import pandas
-from crunch.scoring import ScoredMetric
+from crunch.unstructured import ScoredMetric
 from crunch.unstructured.utils import delta_message
 from crunch.utils import Tracer
 from sklearn.metrics import balanced_accuracy_score
@@ -15,7 +15,7 @@ PREDICTION_FILE_NAME = "prediction.parquet"
 
 
 class ParticipantVisibleError(Exception):
-    """unstructured exception for errors related to participant visibility."""
+    """Custom exception for errors related to participant visibility."""
     pass
 
 

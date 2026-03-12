@@ -85,7 +85,7 @@ def score(
         )
 
     return {
-        metric.id: crunch.scoring.ScoredMetric(value, [])
+        metric.id: crunch.unstructured.ScoredMetric(value, [])
     }
 
 

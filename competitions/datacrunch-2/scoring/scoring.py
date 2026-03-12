@@ -7,7 +7,7 @@ import crunch.unstructured
 import numpy
 import pandas
 from crunch.api import Metric, PhaseType, Target
-from crunch.scoring import ScoredMetric
+from crunch.unstructured import ScoredMetric
 from crunch.unstructured.utils import delta_message
 from crunch.utils import Tracer
 

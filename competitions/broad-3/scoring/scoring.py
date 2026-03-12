@@ -7,7 +7,7 @@ import numpy
 import pandas
 import scanpy
 from crunch.api import Metric, Target
-from crunch.scoring import ScoredMetric
+from crunch.unstructured import ScoredMetric
 from crunch.unstructured.utils import delta_message, truncate
 from crunch.utils import Tracer
 from tqdm import tqdm

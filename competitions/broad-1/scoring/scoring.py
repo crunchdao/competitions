@@ -2,7 +2,7 @@ import os
 import typing
 
 import crunch
-import crunch.custom.utils
+import crunch.unstructured.utils
 import crunch.utils
 import numpy
 import numpy.typing
@@ -28,7 +28,7 @@ def check(
         target_names.remove("ALL")
 
     with tracer.log("Check for required columns"):
-        difference = crunch.custom.utils.delta_message(
+        difference = crunch.unstructured.utils.delta_message(
             {'cell_id', 'gene', 'prediction', 'sample'},
             set(prediction.columns),
         )
@@ -38,7 +38,7 @@ def check(
 
     prediction.set_index("sample", drop=True, inplace=True)
     with tracer.log("Check for missing samples"):
-        difference = crunch.custom.utils.delta_message(
+        difference = crunch.unstructured.utils.delta_message(
             set(target_names),
             set(prediction.index.unique()),
         )
@@ -67,7 +67,7 @@ def check(
                 raise ParticipantVisibleError(f"Found infinity values for target `{target_name}`")
 
         with tracer.log("Check that all genes are present in predictions"):
-            difference = crunch.custom.utils.delta_message(
+            difference = crunch.unstructured.utils.delta_message(
                 gene_names,
                 set(prediction_slice['gene']),
             )
@@ -76,7 +76,7 @@ def check(
                 raise ParticipantVisibleError(f"Gene names do not match for target `{target_name}`: {difference}")
 
         with tracer.log("Check that all cell IDs are present in predictions"):
-            difference = crunch.custom.utils.delta_message(
+            difference = crunch.unstructured.utils.delta_message(
                 cell_ids,
                 set(prediction_slice['cell_id']),
             )
@@ -167,8 +167,8 @@ def score(
             filtered_predictions = filtered_predictions.pivot(index='cell_id', columns='gene', values='prediction')
 
         with tracer.log("Score prediction"):
-            mse_score = crunch.scoring.ScoredMetric(None, [])
-            spearman_score = crunch.scoring.ScoredMetric(None, [])
+            mse_score = crunch.unstructured.ScoredMetric(None, [])
+            spearman_score = crunch.unstructured.ScoredMetric(None, [])
 
             for region_id, cell_ids in tracer.loop(region_cell_mapping.groupby("region_id", observed=True), lambda x: f"Score region -> {x[0]}"):
                 cell_ids = set(cell_ids)
@@ -188,8 +188,8 @@ def score(
                 with tracer.log(f"Calling _spearman"):
                     region_spearman = _spearman(region_prediction, region_y_test)
 
-                mse_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_mse, False))
-                spearman_score.details.append(crunch.scoring.ScoredMetricDetail(region_id, region_spearman, False))
+                mse_score.details.append(crunch.unstructured.ScoredMetricDetail(region_id, region_mse, False))
+                spearman_score.details.append(crunch.unstructured.ScoredMetricDetail(region_id, region_spearman, False))
 
             _average_details(mse_metric, mse_score, scores)
             _average_details(spearman_metric, spearman_score, scores)
@@ -202,8 +202,8 @@ def score(
 
 def _average_details(
     metric: typing.Optional[crunch.api.Metric],
-    scored_metric: crunch.scoring.ScoredMetric,
-    scores: typing.Dict[int, crunch.scoring.ScoredMetric],
+    scored_metric: crunch.unstructured.ScoredMetric,
+    scores: typing.Dict[int, crunch.unstructured.ScoredMetric],
 ):
     if not metric:
         return
@@ -219,7 +219,7 @@ def _average_details(
 def _compute_virtual(
     metric: typing.Optional[crunch.api.Metric],
     metric_ids: typing.List[int],
-    scores: typing.Dict[int, crunch.scoring.ScoredMetric]
+    scores: typing.Dict[int, crunch.unstructured.ScoredMetric]
 ):
     if not metric:
         return
@@ -232,7 +232,7 @@ def _compute_virtual(
         if metric_id in metric_ids
     ])
 
-    scores[metric.id] = crunch.scoring.ScoredMetric(mean)
+    scores[metric.id] = crunch.unstructured.ScoredMetric(mean)
 
 
 def _find_metric_by_name(

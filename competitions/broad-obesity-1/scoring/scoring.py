@@ -8,7 +8,7 @@ import numpy
 import pandas
 import scanpy
 import scipy.stats
-from crunch.scoring import ScoredMetric
+from crunch.unstructured import ScoredMetric
 from crunch.unstructured.utils import delta_message
 from numpy.typing import NDArray
 
