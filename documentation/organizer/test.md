@@ -77,6 +77,7 @@ crunch organizer <competition name> test submission check \
 
 ```python
 from crunch.unstructured import File
+from crunch_convert.requirements_txt import NamedRequirement
 
 
 class ParticipantVisibleError(Exception):
@@ -87,11 +88,15 @@ class ParticipantVisibleError(Exception):
 def check(
     submission_files: list[File],
     model_files: list[File],
+    python_requirements: list[NamedRequirement] | None,
+    r_requirements: list[NamedRequirement] | None,
 ) -> None:
     """
     Parameters:
         submission_files: File of the submissions.
         model_files: File of the resources directory. (empty if none)
+        python_requirements: Parsed content of the `requirements.txt` file. (none if missing or invalid)
+        r_requirements: Parsed content of the `requirements.r.txt` file. (none if missing or invalid)
 
     Return:
         None.
@@ -103,7 +108,7 @@ def check(
     pass
 ```
 
-[There is an example implementation available for `broad-3`.](../../competitions/broad-3/scoring/scoring.py)
+[There is an example implementation available for `broad-3`](../../competitions/broad-3/scoring/submission.py) and [`synth` for requirements.](../../competitions/synth/scoring/submission.py)
 
 # Scoring Module
 
@@ -243,7 +248,7 @@ def compare(
     return []
 ```
 
-[There is an example implementation available for `broad-2`.](../../competitions/broad-2/scoring/scoring.py)
+[There is an example implementation available for `broad-2`.](../../competitions/broad-2/scoring/leaderboard.py)
 
 ## Rank Function
 
@@ -324,7 +329,7 @@ def rank(
     return []
 ```
 
-[There is an example implementation available for `broad-2`.](../../competitions/broad-2/scoring/scoring.py)
+[There is an example implementation available for `broad-2`.](../../competitions/broad-2/scoring/leaderboard.py)
 
 
 # Reward Module
