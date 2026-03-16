@@ -1,9 +1,10 @@
 import re
-from typing import List, Optional
+from typing import List
 
 import crunch.utils
 from crunch.external import humanfriendly
 from crunch.unstructured import File
+from crunch.unstructured.utils import find_file_by_path
 
 
 class ParticipantVisibleError(Exception):
@@ -20,14 +21,14 @@ def check(
 ):
     with tracer.log("Finding report file"):
         report_md_file_path = "Method description.md"
-        report_md_file = _find_file_by_path(submission_files, report_md_file_path)
+        report_md_file = find_file_by_path(submission_files, report_md_file_path)
 
-        report_md_file_named_with_dash = _find_file_by_path(submission_files, report_md_file_path.replace(" ", "-"))
-        report_md_file_named_with_underscore = _find_file_by_path(submission_files, report_md_file_path.replace(" ", "_"))
+        report_md_file_named_with_dash = find_file_by_path(submission_files, report_md_file_path.replace(" ", "-"))
+        report_md_file_named_with_underscore = find_file_by_path(submission_files, report_md_file_path.replace(" ", "_"))
         alternative_report_md_file = report_md_file_named_with_dash or report_md_file_named_with_underscore
 
         if report_md_file is None:
-            is_in_model_files = _find_file_by_path(model_files, report_md_file_path)
+            is_in_model_files = find_file_by_path(model_files, report_md_file_path)
 
             if is_in_model_files:
                 message = f"Missing `{report_md_file_path}` file in the submission, it must not be included in the model files."
@@ -117,14 +118,3 @@ def check(
                 plural, be = "s", "were"
 
             raise ParticipantVisibleError(f"`{report_md_file_path}` must be longer than {minimum_line_count} lines, but only {sentence_count} non-blank line{plural} {be} found.")
-
-
-def _find_file_by_path(
-    files: List[File],
-    path: str,
-) -> Optional[File]:
-    return next((
-        file
-        for file in files
-        if file.path.casefold() == path.casefold()
-    ), None)
