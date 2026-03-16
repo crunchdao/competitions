@@ -1,0 +1,13 @@
+{
+    "title": "Delta Mean Baseline",
+    "authors": [
+        {
+            "name": "Alexis GASSMANN",
+            "link": "https://github.com/Tarandro"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "delta-mean-baseline.ipynb"
+}
