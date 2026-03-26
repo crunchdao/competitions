@@ -9,5 +9,5 @@
     "language": "PYTHON",
     "usage": "SUBMISSION",
     "notebook": true,
-    "entrypoint": "https://github.com/crunchdao/numinous/blob/main/challenge/numinous/examples/quickstart.ipynb"
+    "entrypoint": "https://github.com/crunchdao/crunch-numinous/blob/main/numinous/examples/quickstart.ipynb"
 }
