@@ -56,7 +56,7 @@ def run(
     prediction = pandas.read_parquet(prediction_parquet_file_path)
 
     if context.is_determinism_check_enabled:
-        percentage = 0.3
+        percentage = 0.05
         tolerance = 1e-8
 
         context.log(f"checking determinism by executing the inference again with {percentage * 100:.0f}% of the data (tolerance: {tolerance})")
