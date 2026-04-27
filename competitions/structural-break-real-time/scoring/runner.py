@@ -283,8 +283,8 @@ def _split_periods(
     dataset: pandas.DataFrame,
     online_values: bool = False,
 ):
-    historical = dataset[dataset["period"] == 0]["value"].values
-    online = dataset[dataset["period"] == 1]["value"]
+    historical = dataset[dataset["period"] == 1]["value"].values
+    online = dataset[dataset["period"] == 2]["value"]
 
     if online_values:
         online = online.values
