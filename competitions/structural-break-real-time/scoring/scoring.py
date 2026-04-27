@@ -86,20 +86,51 @@ def score(
     prediction = _load_prediction(prediction_directory_path)
     y_test = _load_y_test(data_directory_path)
 
-    with tracer.log("Reindex prediction"):
-        prediction = prediction.reindex(y_test.index, copy=False)
-
-        if prediction["prediction"].isna().any():
-            raise ParticipantVisibleError("Reindex resulted in NaN values")
-
-    with tracer.log("Call roc_auc_score"):
-        value = roc_auc_score(
+    with tracer.log("Merge prediction with y_test"):
+        merged = prediction.merge(
             y_test,
-            prediction,
+            how="left",
+            left_index=True,
+            right_index=True
         )
 
+        if merged["target"].isna().any():
+            raise ParticipantVisibleError("Merge resulted in NaN values")
+
+        # Add a column for the online time step (0, 1, 2, ...)
+        merged["time_online"] = merged.groupby("id").cumcount()
+
+    with tracer.log("Scoring predictions"):
+        weighted_auc_sum = 0.0
+        total_weight = 0.0
+
+        # Step 1: select all observations at time t
+        for time, group in merged.groupby("time_online"):
+            labels = group["target"].values
+            scores = group["prediction"].values
+
+            # Step 2: count positives and negatives
+            n_positive = int(labels.sum())
+            n_negative = int((1 - labels).sum())
+
+            # Step 3: skip if only one class is present
+            if n_positive == 0 or n_negative == 0:
+                continue
+
+            # Step 4: AUC at this time step and its weight
+            auc_at_time = float(roc_auc_score(labels, scores))
+            weight = float(n_positive * n_negative)
+
+            weighted_auc_sum += weight * auc_at_time
+            total_weight += weight
+
+        if total_weight == 0.0:
+            score_value = 0.5
+        else:
+            score_value = weighted_auc_sum / total_weight
+
     return {
-        metric.id: ScoredMetric(value, []),
+        metric.id: ScoredMetric(score_value, []),
     }
 
 
