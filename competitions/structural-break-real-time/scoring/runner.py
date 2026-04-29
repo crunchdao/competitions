@@ -13,7 +13,6 @@ from crunch.utils import smart_call
 if TYPE_CHECKING:
     from crunch.runner.unstructured import RunnerContext, RunnerExecutorContext, UserModule
 
-getpid = os.getpid
 
 is_parallelism_supported = os.name != "nt"
 if is_parallelism_supported:
@@ -132,27 +131,7 @@ def execute(
         context.trip_data_fuse()
 
         infer_function = module.get_function("infer")
-
-        if is_parallelism_supported:
-            infer_parallelism_key = "INFER_PARALLELISM"
-            infer_parallelism = module.get_value(infer_parallelism_key, default=1)
-
-            if not isinstance(infer_parallelism, int):
-                print(f"[infer] `{infer_parallelism_key}` must be an int")
-                infer_parallelism = 1
-
-            cpu_count = os.cpu_count()
-            if infer_parallelism > cpu_count:
-                print(f"[infer] `{infer_parallelism_key}` must be at most the number of CPUs ({cpu_count})")
-                infer_parallelism = cpu_count
-            elif infer_parallelism == 0:
-                print(f"[infer] using all available CPUs for inference")
-                infer_parallelism = cpu_count
-            elif infer_parallelism < 1:
-                print(f"[infer] `{infer_parallelism_key}` must be at least 1")
-                infer_parallelism = 1
-        else:
-            infer_parallelism = 1
+        infer_parallelism = _get_infer_parallelism(module)
 
         prediction = _run_with_double_protection(
             datasets=datasets,
@@ -192,7 +171,36 @@ def _load_train(data_directory_path: str):
     return datasets
 
 
+def _get_infer_parallelism(module: "UserModule") -> int:
+    if not is_parallelism_supported:
+        return 1
+
+    key = "INFER_PARALLELISM"
+    value = module.get_value(key, default=1)
+
+    if not isinstance(value, int):
+        print(f"[infer] `{key}` must be an int")
+        return 1
+
+    cpu_count = os.cpu_count()
+    if value > cpu_count:
+        print(f"[infer] `{key}` must be at most the number of CPUs ({cpu_count})")
+        value = cpu_count
+    elif value == 0:
+        print(f"[infer] using all available CPUs for inference")
+        value = cpu_count
+    elif value < 1:
+        print(f"[infer] `{key}` must be at least 1")
+        value = 1
+
+    return value
+
+
 class ProtocolError(RuntimeError):
+    pass
+
+
+class NestedForkError(RuntimeError):
     pass
 
 
@@ -246,7 +254,7 @@ def _run_with_double_protection(
         for value in online:
             # X: ensure not forked
             if state == State.NESTED_FORK:
-                raise ProtocolError("cannot iterate in online stream in a child process after a fork")
+                raise NestedForkError("cannot iterate in online stream in a child process after a fork")
 
             # 6: ensure not iterating a dataset
             if state != State.READY_FOR_VALUE:
@@ -256,25 +264,6 @@ def _run_with_double_protection(
             state = State.CONSUMED
 
             yield value
-
-    if True:
-        # X: record initial pid to detect forks
-        initial_pid = getpid()
-
-        # 1: initialize user code
-        user_code = consumer_factory(dataset_stream())
-
-        # 1.1: ensure a yield has been used
-        if not isinstance(user_code, GeneratorType):
-            raise ProtocolError("yield not called")
-
-        # 1.2: detect the first yield is indeed None
-        if next(user_code) is not None:
-            raise ProtocolError(f"first yield must return None")
-
-        # X: check for forks
-        if getpid() != initial_pid:
-            raise ProtocolError("fork detected after initialization")
 
     slices = _split_into_batches(len(datasets), parallelism)
 
@@ -300,10 +289,25 @@ def _run_with_double_protection(
         if queue is not None:
             print(f"[worker:{worker_index}] started with pid={os.getpid()}, starting at index={start_index} and ending at index={end_index}")
 
+        if True:
+            # 1: initialize user code
+            user_code = consumer_factory(dataset_stream())
+
+            # 1.1: ensure a yield has been used
+            if not isinstance(user_code, GeneratorType):
+                raise ProtocolError("yield not called")
+
+            # 1.2: detect the first yield is indeed None
+            if next(user_code) is not None:
+                raise ProtocolError(f"first yield must return None")
+
+            if state == State.NESTED_FORK:
+                raise NestedForkError(f"cannot do first yield in a child process after a fork ({os.getpid()})")
+
         for dataset in datasets[start_index:end_index]:
             # X: ensure not forked
             if state == State.NESTED_FORK:
-                raise ProtocolError("cannot iterate in datasets in a child process after a fork")
+                raise NestedForkError(f"cannot iterate in datasets in a child process after a fork ({os.getpid()})")
 
             # 2: allow reading a dataset next
             state = State.READY_FOR_DATASET
@@ -320,6 +324,10 @@ def _run_with_double_protection(
                     raise ProtocolError("yield not called enough times")
 
                 y = post_processor(y)
+
+                # X: ensure not forked
+                if state == State.NESTED_FORK:
+                    raise NestedForkError("cannot yield in a child process after a fork")
 
                 # 7: ensure state has been reset by iterating in online stream
                 if state != State.CONSUMED:
@@ -357,15 +365,16 @@ def _run_with_double_protection(
             ])
         except Exception as exception:
             traceback_str = traceback.format_exception(type(exception), exception, exception.__traceback__)
-            print(f"[parallel_worker:{worker_index}] encountered an exception:\n" + "".join(traceback_str))
+            print(f"[worker:{worker_index}] encountered an exception:\n" + "".join(traceback_str))
 
-            queue.put([
-                worker_index,
-                False,
-                None,
-            ])
+            if not isinstance(exception, NestedForkError):
+                queue.put([
+                    worker_index,
+                    False,
+                    None,
+                ])
 
-            exit(1)
+            os._exit(1)
 
     if parallelism == 1:
         # I: run in the main process
@@ -422,7 +431,7 @@ def _split_into_batches(element_count: int, batch_count: int) -> List[Tuple[int,
 def _start_processes_and_wait(
     processes: List[Process],
     queue: Queue,
-    dead_check_interval = 5.0
+    dead_check_interval=5.0
 ):
     results = []
 
@@ -455,7 +464,7 @@ def _start_processes_and_wait(
         for process in processes:
             if process.is_alive():
                 process.kill()
-        
+
         raise
 
     finally:
