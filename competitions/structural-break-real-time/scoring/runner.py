@@ -45,10 +45,10 @@ def run(
     context: "RunnerContext",
     prediction_directory_path: str,
 ):
-    # if context.force_first_train:
-    #     context.execute(
-    #         command="train",
-    #     )
+    if context.force_first_train:
+        context.execute(
+            command="train",
+        )
 
     prediction_parquet_file_path = os.path.join(prediction_directory_path, "prediction.parquet")
 
@@ -372,6 +372,9 @@ def _run_with_double_protection(
         worker(0)
 
     else:
+        import crunch.monkey_patches as monkey_patches
+        monkey_patches.SHOULD_PRINT_PID_WHEN_POSSIBLE = True
+
         queue = Queue()
         processes = [
             Process(
