@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Iterator, List, Lite
 import numpy
 import pandas
 from crunch.utils import smart_call
+from threadpoolctl import threadpool_limits
 
 if TYPE_CHECKING:
     from crunch.runner.unstructured import RunnerContext, RunnerExecutorContext, UserModule
@@ -352,8 +353,12 @@ def _run_with_double_protection(
             print(f"[worker:{worker_index}] finished")
 
     def parallel_worker(worker_index: int, queue: Queue):
+        import crunch.monkey_patches as monkey_patches
+        monkey_patches.SHOULD_PRINT_PID_WHEN_POSSIBLE = True
+
         try:
-            worker(worker_index, queue)
+            with threadpool_limits(limits=1):
+                worker(worker_index, queue)
 
             queue.put([
                 worker_index,
@@ -381,9 +386,6 @@ def _run_with_double_protection(
         worker(0)
 
     else:
-        import crunch.monkey_patches as monkey_patches
-        monkey_patches.SHOULD_PRINT_PID_WHEN_POSSIBLE = True
-
         queue = Queue()
         processes = [
             Process(
