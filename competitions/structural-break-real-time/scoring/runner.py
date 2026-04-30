@@ -357,7 +357,7 @@ def _run_with_double_protection(
         monkey_patches.SHOULD_PRINT_PID_WHEN_POSSIBLE = True
 
         try:
-            with threadpool_limits(limits=1):
+            with threadpool_limits(limits=0):
                 worker(worker_index, queue)
 
             queue.put([
