@@ -1,22 +1,18 @@
 import gc
 import os
-import traceback
 from enum import Enum
-from multiprocessing import Process, Queue
 from types import GeneratorType
-from typing import TYPE_CHECKING, Any, Callable, Generator, Iterator, List, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Generator, Iterator, List, Literal, Optional, Union
 
 import numpy
 import pandas
 from crunch.utils import smart_call
-from threadpoolctl import threadpool_limits
 
 if TYPE_CHECKING:
     from crunch.runner.unstructured import RunnerContext, RunnerExecutorContext, UserModule
 
 
-is_parallelism_supported = os.name != "nt"
-if is_parallelism_supported:
+if os.name != "nt":
     register_at_fork = os.register_at_fork
 else:
     # the Cloud environment isn't on Windows
@@ -132,11 +128,9 @@ def execute(
         context.trip_data_fuse()
 
         infer_function = module.get_function("infer")
-        infer_parallelism = _get_infer_parallelism(module)
 
         prediction = _run_with_double_protection(
             datasets=datasets,
-            parallelism=infer_parallelism,
             consumer_factory=lambda datasets: smart_call(
                 infer_function,
                 default_values,
@@ -172,31 +166,6 @@ def _load_train(data_directory_path: str):
     return datasets
 
 
-def _get_infer_parallelism(module: "UserModule") -> int:
-    if not is_parallelism_supported:
-        return 1
-
-    key = "INFER_PARALLELISM"
-    value = module.get_value(key, default=1)
-
-    if not isinstance(value, int):
-        print(f"[infer] `{key}` must be an int")
-        return 1
-
-    cpu_count = os.cpu_count()
-    if value > cpu_count:
-        print(f"[infer] `{key}` must be at most the number of CPUs ({cpu_count})")
-        value = cpu_count
-    elif value == 0:
-        print(f"[infer] using all available CPUs for inference")
-        value = cpu_count
-    elif value < 1:
-        print(f"[infer] `{key}` must be at least 1")
-        value = 1
-
-    return value
-
-
 class ProtocolError(RuntimeError):
     pass
 
@@ -208,7 +177,6 @@ class NestedForkError(RuntimeError):
 def _run_with_double_protection(
     *,
     datasets: List[pandas.DataFrame],
-    parallelism: int,
     consumer_factory: Callable[[Iterator], Generator],
     post_processor: Callable[[Any], Any],
 ):
@@ -266,9 +234,6 @@ def _run_with_double_protection(
 
             yield value
 
-    slices = _split_into_batches(len(datasets), parallelism)
-
-    # I: shared variable for both main and worker processes
     prediction_index = []
     prediction_values = []
 
@@ -279,128 +244,67 @@ def _run_with_double_protection(
         state = State.NESTED_FORK
         next_value = None
 
-    def worker(worker_index: int, queue: Optional[Queue] = None):
-        nonlocal state, next_value
+    # X: register security measure
+    register_at_fork(after_in_child=_after_in_child)
 
-        # X: register security measure
-        register_at_fork(after_in_child=_after_in_child)
+    if True:
+        # 1: initialize user code
+        user_code = consumer_factory(dataset_stream())
 
-        start_index, end_index = slices[worker_index]
+        # 1.1: ensure a yield has been used
+        if not isinstance(user_code, GeneratorType):
+            raise ProtocolError("yield not called")
 
-        if queue is not None:
-            print(f"[worker:{worker_index}] started with pid={os.getpid()}, starting at index={start_index} and ending at index={end_index}")
+        # 1.2: detect the first yield is indeed None
+        if next(user_code) is not None:
+            raise ProtocolError(f"first yield must return None")
 
-        if True:
-            # 1: initialize user code
-            user_code = consumer_factory(dataset_stream())
+        if state == State.NESTED_FORK:
+            raise NestedForkError(f"cannot do first yield in a child process after a fork ({os.getpid()})")
 
-            # 1.1: ensure a yield has been used
-            if not isinstance(user_code, GeneratorType):
-                raise ProtocolError("yield not called")
+    for dataset in datasets:
+        # X: ensure not forked
+        if state == State.NESTED_FORK:
+            raise NestedForkError(f"cannot iterate in datasets in a child process after a fork ({os.getpid()})")
 
-            # 1.2: detect the first yield is indeed None
-            if next(user_code) is not None:
-                raise ProtocolError(f"first yield must return None")
+        # 2: allow reading a dataset next
+        state = State.READY_FOR_DATASET
 
-            if state == State.NESTED_FORK:
-                raise NestedForkError(f"cannot do first yield in a child process after a fork ({os.getpid()})")
+        historical, online = _split_periods(dataset, online_values=False)
 
-        for dataset in datasets[start_index:end_index]:
+        # 2.1: set value for dataset stream
+        next_value = (historical, online_stream(online))
+
+        for index in online.index:
+            # 4: re-activate user code
+            y = next(user_code, sentinel)
+            if y is sentinel:
+                raise ProtocolError("yield not called enough times")
+
+            y = post_processor(y)
+
             # X: ensure not forked
             if state == State.NESTED_FORK:
-                raise NestedForkError(f"cannot iterate in datasets in a child process after a fork ({os.getpid()})")
+                raise NestedForkError("cannot yield in a child process after a fork")
 
-            # 2: allow reading a dataset next
-            state = State.READY_FOR_DATASET
+            # 7: ensure state has been reset by iterating in online stream
+            if state != State.CONSUMED:
+                raise ProtocolError("multiple yield detected")
 
-            historical, online = _split_periods(dataset, online_values=False)
+            # 7.1: reset state for next value
+            state = State.READY_FOR_VALUE
 
-            # 2.1: set value for dataset stream
-            next_value = (historical, online_stream(online))
+            prediction_index.append(index)
+            prediction_values.append(y)
 
-            for index in online.index:
-                # 4: re-activate user code
-                y = next(user_code, sentinel)
-                if y is sentinel:
-                    raise ProtocolError("yield not called enough times")
+        # 8: clean up for next dataset
+        next_value = None
 
-                y = post_processor(y)
-
-                # X: ensure not forked
-                if state == State.NESTED_FORK:
-                    raise NestedForkError("cannot yield in a child process after a fork")
-
-                # 7: ensure state has been reset by iterating in online stream
-                if state != State.CONSUMED:
-                    raise ProtocolError("multiple yield detected")
-
-                # 7.1: reset state for next value
-                state = State.READY_FOR_VALUE
-
-                prediction_index.append(index)
-                prediction_values.append(y)
-
-            # 8: clean up for next dataset
-            next_value = None
-
-        # 9: ensure user clean up is called
-        if True:
-            last_check = next(user_code, sentinel)
-            if last_check is not sentinel:
-                raise ProtocolError("code did not exit after last dataset")
-
-        if queue is not None:
-            print(f"[worker:{worker_index}] finished")
-
-    def parallel_worker(worker_index: int, queue: Queue):
-        import crunch.monkey_patches as monkey_patches
-        monkey_patches.SHOULD_PRINT_PID_WHEN_POSSIBLE = True
-
-        try:
-            with threadpool_limits(limits=1, user_api="blas"):
-                worker(worker_index, queue)
-
-            queue.put([
-                worker_index,
-                True,
-                (
-                    prediction_index,
-                    prediction_values,
-                )
-            ])
-        except Exception as exception:
-            traceback_str = traceback.format_exception(type(exception), exception, exception.__traceback__)
-            print(f"[worker:{worker_index}] encountered an exception:\n" + "".join(traceback_str))
-
-            if not isinstance(exception, NestedForkError):
-                queue.put([
-                    worker_index,
-                    False,
-                    None,
-                ])
-
-            os._exit(1)
-
-    if parallelism == 1:
-        # I: run in the main process
-        worker(0)
-
-    else:
-        queue = Queue()
-        processes = [
-            Process(
-                target=parallel_worker,
-                args=(index, queue)
-            )
-            for index in range(len(slices))
-        ]
-
-        results = _start_processes_and_wait(processes, queue)
-
-        # I: collect results (ordered by worker index)
-        for _, _, (batch_prediction_index, batch_prediction_values) in results:
-            prediction_index.extend(batch_prediction_index)
-            prediction_values.extend(batch_prediction_values)
+    # 9: ensure user clean up is called
+    if True:
+        last_check = next(user_code, sentinel)
+        if last_check is not sentinel:
+            raise ProtocolError("code did not exit after last dataset")
 
     return pandas.DataFrame(
         data={
@@ -411,70 +315,6 @@ def _run_with_double_protection(
             names=["id", "time"],
         ),
     )
-
-
-def _split_into_batches(element_count: int, batch_count: int) -> List[Tuple[int, int]]:
-    batch_size, remainder = divmod(element_count, batch_count)
-
-    indices = []
-
-    start = 0
-    for index in range(batch_count):
-        extra = 1 if index < remainder else 0
-
-        end = start + batch_size + extra
-        indices.append((start, end))
-
-        start = end
-
-    return indices
-
-
-def _start_processes_and_wait(
-    processes: List[Process],
-    queue: Queue,
-    dead_check_interval=5.0
-):
-    results = []
-
-    for process in processes:
-        process.start()
-
-    try:
-        for _ in range(len(processes)):
-            while True:
-                try:
-                    _, successful, _ = result = queue.get(timeout=dead_check_interval)
-                    break
-                except Exception:
-                    dead = [
-                        process
-                        for process in processes
-                        if not process.is_alive() and process.exitcode != 0
-                    ]
-
-                    if dead:
-                        pid_to_exit_codes = ", ".join([f"{process.pid}={process.exitcode}" for process in dead])
-                        raise ProtocolError(f"{len(dead)} worker(s) died silently (exit codes: {pid_to_exit_codes})")
-
-            if not successful:
-                raise ProtocolError("a worker process encountered an exception")
-
-            results.append(result)
-
-    except Exception:
-        for process in processes:
-            if process.is_alive():
-                process.kill()
-
-        raise
-
-    finally:
-        for process in processes:
-            process.join()
-
-    results.sort(key=lambda x: x[0])
-    return results
 
 
 def _split_periods(
