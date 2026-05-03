@@ -81,7 +81,7 @@ def score(
     target_and_metrics: List[Tuple[Target, List[Metric]]],
 ):
     metric = target_and_metrics[0][1][0]  # [first entry], [take list of metrics], [take first metric]
-    assert metric.name == "roc-auc", "missing roc-auc metric"
+    assert metric.name == "ts-auc", "missing ts-auc metric"
 
     prediction = _load_prediction(prediction_directory_path)
     y_test = _load_y_test(data_directory_path)
