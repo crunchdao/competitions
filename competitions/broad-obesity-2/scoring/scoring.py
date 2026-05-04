@@ -308,7 +308,7 @@ def _mmd(
 
     kernel_mul = 2.0
     kernel_num = 5
-    fix_sigma = 2326
+    fix_sigma = 849
 
     # Balancing the samples to compute mmd using equal number of samples
     gtruth_X, pred_X = balance_source_target_sample_per_perturbation(ground_truth_X, prediction_X)
