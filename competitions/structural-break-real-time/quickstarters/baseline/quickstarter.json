@@ -9,5 +9,6 @@
     "language": "PYTHON",
     "usage": "SUBMISSION",
     "notebook": true,
-    "entrypoint": "baseline.ipynb"
+    "entrypoint": "baseline.ipynb",
+    "kaggleUrl": "https://www.kaggle.com/code/crunchdao/structural-break-real-time-baseline"
 }
