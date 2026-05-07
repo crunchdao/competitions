@@ -1,7 +1,10 @@
 import gc
 import json
 import os
-from time import sleep
+from dataclasses import dataclass
+from datetime import timedelta
+from statistics import mean
+from time import sleep, time
 from typing import TYPE_CHECKING, List
 
 import pandas
@@ -71,35 +74,63 @@ def run(
     predictions: List[pandas.DataFrame] = []
     prediction_file_path = os.path.join(prediction_directory_path, "prediction.parquet")
 
-    for index, moon in enumerate(moons):
-        train, forced_train = False, False
-        if train_frequency != 0 and moon % train_frequency == 0:
-            train = True
-        elif index == 0 and not context.has_model:
-            train = True
-        elif index == 0 and force_first_train:
-            train, forced_train = True, True
+    moon_infos = MoonInfo.get(
+        moons=moons,
+        train_frequency=train_frequency,
+        has_model=context.has_model,
+        force_first_train=force_first_train,
+    )
 
-        forced_train = " forced=True" if forced_train else ""
-        context.log(f"looping moon={moon} train={train}{forced_train} ({index + 1}/{len(moons)})")
+    train_estimator = DurationEstimator(total_count=sum(1 for moon_info in moon_infos if moon_info.train))
+    infer_estimator = DurationEstimator(total_count=len(moon_infos))
 
-        if train:
-            context.execute(
-                command="train",
-                parameters={
-                    "moon": moon,
-                }
-            )
+    def stop_if_estimated_time_exceeds_remaining_time():
+        remaining_time = context.remaining_duration_before_timeout
+        if remaining_time is None:
+            return
+
+        extra_percent = 1.05
+        required_time = (train_estimator.estimated_required_time + infer_estimator.estimated_required_time) * extra_percent
+
+        required_time_str = _truncate_milliseconds(required_time)
+        train_average = _truncate_milliseconds(train_estimator.average_duration)
+        infer_average = _truncate_milliseconds(infer_estimator.average_duration)
+        remaining_time_str = _truncate_milliseconds(remaining_time)
+
+        context.log(f"[debug] estimated required time: ~{required_time_str} (train average: {train_average}, infer average: {infer_average}), remaining time: ~{remaining_time_str}")
+
+        if required_time > remaining_time:
+            context.log(f"stopping early at moon={moon_info.key} because the estimated required time (~{required_time_str}, at ~{train_average}/train, and ~{infer_average}/infer, +{int((extra_percent - 1) * 100)}%) is greater than the remaining time before timeout (~{remaining_time_str})", error=True)
+            exit(1)
+
+    for moon_info in moon_infos:
+        forced_train = " forced=True" if moon_info.forced_train else ""
+        context.log(f"looping moon={moon_info.key} train={moon_info.train}{forced_train} ({moon_info.number}/{len(moons)})")
+
+        if moon_info.train:
+            stop_if_estimated_time_exceeds_remaining_time()
+
+            with train_estimator:
+                context.execute(
+                    command="train",
+                    parameters={
+                        "moon": moon_info.key,
+                    }
+                )
 
         _delete_if_exists(prediction_file_path)
 
-        context.execute(
-            command="infer",
-            parameters={
-                "moon": moon,
-                "prediction_file_path": prediction_file_path,
-            }
-        )
+        if True:
+            stop_if_estimated_time_exceeds_remaining_time()
+
+            with infer_estimator:
+                context.execute(
+                    command="infer",
+                    parameters={
+                        "moon": moon_info.key,
+                        "prediction_file_path": prediction_file_path,
+                    }
+                )
 
         predictions.append(pandas.read_parquet(prediction_file_path))
 
@@ -184,10 +215,98 @@ def execute(
 
         prediction.to_parquet(prediction_file_path, index=False)
 
+        # pandas.DataFrame().to_parquet(prediction_file_path, index=False)
+
     return {
         "train": train,
         "infer": infer,
     }
+
+
+@dataclass
+class MoonInfo:
+
+    key: int
+    number: int
+    train: bool
+    forced_train: bool
+
+    @staticmethod
+    def get(
+        moons: List[int],
+        train_frequency: int,
+        has_model: bool,
+        force_first_train: bool,
+    ):
+        infos: List["MoonInfo"] = []
+
+        for index, moon in enumerate(moons):
+            train, forced_train = False, False
+            if train_frequency != 0 and moon % train_frequency == 0:
+                train = True
+            elif index == 0 and not has_model:
+                train = True
+            elif index == 0 and force_first_train:
+                train, forced_train = True, True
+
+            infos.append(MoonInfo(
+                key=moon,
+                number=index + 1,
+                train=train,
+                forced_train=forced_train,
+            ))
+
+        return infos
+
+
+class DurationEstimator:
+
+    def __init__(
+        self,
+        total_count: int,
+    ):
+        self.total_count = total_count
+
+        self.durations: List[float] = []
+
+    def __enter__(self):
+        self._start_time = time()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        duration = time() - self._start_time
+        # duration = 3600
+        self.durations.append(duration)
+
+    @property
+    def average_duration(self) -> float:
+        if not self.durations:
+            return timedelta(seconds=0)
+
+        return timedelta(seconds=mean(self.durations))
+
+    @property
+    def estimated_required_time(self) -> timedelta:
+        remaining_count = self.total_count - len(self.durations)
+
+        return timedelta(seconds=self.average_duration.total_seconds() * remaining_count)
+
+
+def _truncate_milliseconds(duration: timedelta):
+    minute, second = divmod(duration.total_seconds(), 60)
+    hour, minute = divmod(minute, 60)
+
+    builder = ""
+    if hour != 0:
+        builder += f"%dh" % int(hour)
+    if minute != 0:
+        zeros = 2 if minute < 10 and builder != "" else 1
+        builder += f"%0{zeros}dm" % int(minute)
+    if second != 0 or builder == "":
+        zeros = 2 if second < 10 and builder != "" else 1
+        builder += f"%0{zeros}ds" % int(second)
+
+    return builder
 
 
 def _delete_if_exists(path: str):
