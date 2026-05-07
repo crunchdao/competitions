@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from datetime import timedelta
 from statistics import mean
-from time import time
+from time import sleep, time
 from typing import TYPE_CHECKING, List
 
 import pandas
