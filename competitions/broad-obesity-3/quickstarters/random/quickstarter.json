@@ -1,0 +1,12 @@
+{
+    "title": "Random",
+    "authors": [
+        {
+            "name": "The Crunch Team"
+        }
+    ],
+    "language": "PYTHON",
+    "usage": "SUBMISSION",
+    "notebook": true,
+    "entrypoint": "random.ipynb"
+}
