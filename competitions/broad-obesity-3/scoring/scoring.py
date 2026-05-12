@@ -36,7 +36,7 @@ def check(
         thermogenic_signatures_ids = set(thermogenic_signatures["id"].unique())
 
     with tracer.log("Load ground truth: predict_perturbations"):
-        predict_perturbations = pandas.read_csv(os.path.join(data_directory_path, "crunch3_predict_perturbations.csv"))
+        predict_perturbations = pandas.read_parquet(os.path.join(data_directory_path, "predict_perturbations_3.parquet"))
 
     with tracer.log("Validating prediction"):
         with tracer.log("Load prediction"):
@@ -71,7 +71,7 @@ def check(
         with tracer.log(f"Check data types"):
             column_name = "GenePairID"
             with tracer.log(f"...in the '{column_name}' column"):
-                expected_values = set(predict_perturbations["gene_1"] + "+" + predict_perturbations["gene_2"])
+                expected_values = set(predict_perturbations["gene_1"].astype(str) + "+" + predict_perturbations["gene_2"].astype(str))
                 got_values = set(prediction[column_name].values)
 
                 difference = delta_message(
