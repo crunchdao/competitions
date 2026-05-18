@@ -33,7 +33,7 @@ def check(
 
     with tracer.log("Load ground truth: thermogenic_signatures"):
         thermogenic_signatures = pandas.read_csv(os.path.join(data_directory_path, "thermogenic_signatures.csv"))
-        thermogenic_signatures_ids = set(thermogenic_signatures["id"].unique())
+        thermogenic_signatures_names = set(thermogenic_signatures["name"].unique())
 
     with tracer.log("Load ground truth: predict_perturbations"):
         predict_perturbations = pandas.read_parquet(os.path.join(data_directory_path, "predict_perturbations_3.parquet"))
@@ -44,7 +44,7 @@ def check(
 
         with tracer.log("Check for required columns"):
             difference = delta_message(
-                {"GenePairID", "FinalAggScore", "Rank"} | thermogenic_signatures_ids,
+                {"GenePairID", "FinalAggScore", "Rank"} | thermogenic_signatures_names,
                 set(prediction.columns),
             )
 
@@ -82,7 +82,7 @@ def check(
                 if difference:
                     raise ParticipantVisibleError(f"Values in column `{column_name}` do not match expected gene pairs: {difference}")
 
-            for column_name in tracer.loop(thermogenic_signatures_ids, lambda x: f"...in the '{x}' column"):
+            for column_name in tracer.loop(thermogenic_signatures_names, lambda x: f"...in the '{x}' column"):
                 if not pandas.api.types.is_numeric_dtype(prediction[column_name].values):
                     raise ParticipantVisibleError(f"Found non-numeric values for column `{column_name}`")
 
