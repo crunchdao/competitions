@@ -4,7 +4,7 @@ from enum import Enum, IntEnum
 from socket import IPPROTO_TCP, SOCK_STREAM, TCP_NODELAY, socket
 from threading import Thread
 from types import GeneratorType
-from typing import TYPE_CHECKING, Any, Callable, Generator, Iterator, Literal, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Iterator, Literal, Optional, Tuple, TypeVar, Union, cast
 
 import numpy
 import pandas
@@ -14,8 +14,10 @@ if TYPE_CHECKING:
     from crunch.runner.unstructured import RunnerContext, RunnerExecutorContext, UserModule
 
 
+T = TypeVar("T")
+
 @dataclass
-class Box[T]:
+class Box(Generic[T]):
     value: T
 
 
