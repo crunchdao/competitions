@@ -5,6 +5,7 @@ from socket import IPPROTO_TCP, SOCK_STREAM, TCP_NODELAY, socket
 from threading import Thread
 from types import GeneratorType
 from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Iterator, Literal, Optional, Tuple, TypeVar, Union, cast
+from uuid import uuid4
 
 import numpy
 import pandas
@@ -62,7 +63,7 @@ else:
     def os_create_server_socket() -> Tuple[socket, ServerEndpointType]:
         from socket import AF_UNIX
 
-        SOCKET_PATH = "/tmp/runner_socket"
+        SOCKET_PATH = f"/tmp/runner.{uuid4()}.sock"
         if os.path.exists(SOCKET_PATH):
             os.unlink(SOCKET_PATH)
 
