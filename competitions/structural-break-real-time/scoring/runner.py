@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
+
 @dataclass
 class Box(Generic[T]):
     value: T
@@ -177,9 +178,6 @@ def execute(
                 post_processor=_post_process_infer_yield_result,
             )
 
-        # print(f"[debug] executor total time wasted in sending: {remote.send_wasted_time:.3f}s")
-        # print(f"[debug] executor total time wasted in receiving: {remote.receive_wasted_time:.3f}s")
-
     return {
         "train": train,
         "infer": infer,
@@ -212,20 +210,13 @@ class Remote:
         self._receive_wasted_time_ns = 0.0
 
     def receive(self) -> Tuple["RemoteCommand", Union[float, int, None]]:
-        # start_time = perf_counter_ns()
-
         data = self.receive_raw(1 + 4)
         if not data:
             raise RemoteError("connection closed by client")
 
-        command, value = RemoteCommand.decode(data)
-
-        # self._receive_wasted_time_ns += (perf_counter_ns() - start_time)
-        return command, value
+        return RemoteCommand.decode(data)
 
     def receive_raw(self, length: int) -> bytes:
-        # start_time = perf_counter_ns()
-
         data = bytearray()
         while len(data) < length:
             packet = self._client.recv(length - len(data))
@@ -233,20 +224,14 @@ class Remote:
                 raise RemoteError("connection closed by client")
             data.extend(packet)
 
-        # self._receive_wasted_time_ns += (perf_counter_ns() - start_time)
         return bytes(data)
 
     def send(self, command: "RemoteCommand", value: Union[float, int] = float("nan")):
-        # start_time = perf_counter_ns()
         data = command.encode(value)
-
         self._client.send(data)
-        # self._send_wasted_time_ns += (perf_counter_ns() - start_time)
 
     def send_raw(self, data: bytes):
-        # start_time = perf_counter_ns()
         self._client.send(data)
-        # self._send_wasted_time_ns += (perf_counter_ns() - start_time)
 
     def expect(self, expected: "RemoteCommand") -> Union[float, int, None]:
         command, value = self.receive()
@@ -263,14 +248,6 @@ class Remote:
             raise RemoteError(f"expected command {expected.name} or {permitted.name} but got {command.name}")
 
         return command, value
-
-    # @property
-    # def send_wasted_time(self) -> float:
-    #     return self._send_wasted_time_ns / 1e9
-
-    # @property
-    # def receive_wasted_time(self) -> float:
-    #     return self._receive_wasted_time_ns / 1e9
 
 
 class RemoteError(RuntimeError):
@@ -358,9 +335,6 @@ def run_infer_with_server(
 
             remote.send(RemoteCommand.END)
 
-        # context.log(f"[debug] runner total time wasted in sending: {remote.send_wasted_time:.3f}s")
-        # context.log(f"[debug] runner total time wasted in receiving: {remote.receive_wasted_time:.3f}s")
-
     def run_with_catch():
         try:
             run()
@@ -441,7 +415,7 @@ def _run_with_double_protection(
 
             yield next_value
 
-    # 3: provide the values
+    # 3.1: provide the values
     def online_stream(next_online_value: "Box"):
         nonlocal state
 
@@ -513,6 +487,7 @@ def _run_with_double_protection(
         next_value = (historical, online_generator)
 
         while True:
+            # 3: get next command
             command, next_online_value.value = remote.expect2(RemoteCommand.ONLINE_POINT, RemoteCommand.END_TIMESERIES)
             if command == RemoteCommand.END_TIMESERIES:
                 break
