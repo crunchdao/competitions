@@ -427,7 +427,7 @@ def _run_with_double_protection(
 
             # 6: ensure not iterating a dataset
             if state != State.READY_FOR_VALUE:
-                raise ProtocolError(f"previous value not yield-ed")
+                raise ProtocolError("previous value not yield-ed")
 
             # 6.1: mark value as consumed
             state = State.CONSUMED
@@ -511,9 +511,7 @@ def _run_with_double_protection(
             # 7.1: reset state for next value
             state = State.READY_FOR_VALUE
 
-            if next_online_value.value is None:
-                break
-
+            # 7.2: send prediction to server
             remote.send(RemoteCommand.NEW_PREDICTION, y)
 
         # 8: clean up for next dataset
