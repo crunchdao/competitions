@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import numpy
 import pandas
+from crunch.__version__ import __version__ as crunch_version
 from crunch.utils import smart_call
 
 if TYPE_CHECKING:
@@ -112,7 +113,7 @@ def run(
             command="train",
         )
 
-    prediction = run_infer_with_server(context, data_directory_path, determinism_check=False)
+    prediction = _run_infer_with_server(context, data_directory_path, determinism_check=False)
 
     if context.is_determinism_check_enabled:
         percentage = 0.3
@@ -120,7 +121,7 @@ def run(
 
         context.log(f"checking determinism by executing the inference again with {percentage * 100:.0f}% of the data (tolerance: {tolerance})")
 
-        prediction2 = run_infer_with_server(context, data_directory_path, determinism_check=percentage)
+        prediction2 = _run_infer_with_server(context, data_directory_path, determinism_check=percentage)
 
         is_deterministic = numpy.allclose(prediction.loc[prediction2.index, "prediction"], prediction2["prediction"], atol=tolerance)
         context.report_determinism(is_deterministic)
@@ -156,7 +157,6 @@ def execute(
         )
 
     def infer(
-        determinism_check: Union[Literal[False], float],  # just for logging
         server_endpoint: ServerEndpointType,
     ):
         context.trip_data_fuse()
@@ -291,7 +291,7 @@ class RemoteCommand(IntEnum):
         return command, value
 
 
-def run_infer_with_server(
+def _run_infer_with_server(
     context: "RunnerContext",
     data_directory_path: str,
     determinism_check: Union[Literal[False], float],
@@ -345,13 +345,27 @@ def run_infer_with_server(
     thread = Thread(target=run_with_catch, daemon=True)
     thread.start()
 
-    context.execute(
-        command="infer",
-        parameters={
-            "determinism_check": determinism_check,
-            "server_endpoint": endpoint,
-        }
-    )
+    if crunch_version < "11.6.0":  # temporary workaround for older versions
+        context.execute(
+            command="infer",
+            parameters={
+                "determinism_check": determinism_check,
+                "server_endpoint": endpoint,
+            },
+        )
+    else:
+        context.execute(
+            command="infer",
+            parameters={
+                "server_endpoint": endpoint,
+            },
+            span_hidden_parameters=[
+                "server_endpoint",
+            ],
+            span_attributes={
+                "determinism_check": determinism_check,
+            },
+        )
 
     thread.join()
 
