@@ -1,15 +1,16 @@
 import os
+import sys
 from dataclasses import dataclass
 from enum import Enum, IntEnum
 from socket import IPPROTO_TCP, SOCK_STREAM, TCP_NODELAY, socket
+from tempfile import NamedTemporaryFile
 from threading import Thread
 from types import GeneratorType
-from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Iterator, Literal, Optional, Tuple, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Iterable, Iterator, List, Literal, Optional, Tuple, TypeVar, Union, cast
 from uuid import uuid4
 
 import numpy
 import pandas
-from crunch.__version__ import __version__ as crunch_version
 from crunch.utils import smart_call
 
 if TYPE_CHECKING:
@@ -31,6 +32,7 @@ if os.name == "nt":
     from socket import AF_INET
 
     ServerEndpointType = int
+    is_parallelism_supported = False
 
     def os_register_at_fork(*, after_in_child: Optional[Callable] = None, **kwargs):
         pass
@@ -58,6 +60,7 @@ else:
     from socket import AF_UNIX
 
     ServerEndpointType = str
+    is_parallelism_supported = True
 
     os_register_at_fork = os.register_at_fork
 
@@ -113,7 +116,23 @@ def run(
             command="train",
         )
 
-    prediction = _run_infer_with_server(context, data_directory_path, determinism_check=False)
+    with NamedTemporaryFile() as temp_file:
+        temp_file.close()
+
+        context.execute(
+            command="get_parallelism",
+            parameters={
+                "output_file_path": temp_file.name,
+            },
+            install_data_fuse=False,
+        )
+
+        with open(temp_file.name, "r") as fd:
+            parallelism = int(fd.read())
+
+        context.log(f"using a parallelism of {parallelism}")
+
+    prediction = _run_infer_with_server(context, data_directory_path, parallelism, determinism_check=False)
 
     if context.is_determinism_check_enabled:
         percentage = 0.3
@@ -121,7 +140,7 @@ def run(
 
         context.log(f"checking determinism by executing the inference again with {percentage * 100:.0f}% of the data (tolerance: {tolerance})")
 
-        prediction2 = _run_infer_with_server(context, data_directory_path, determinism_check=percentage)
+        prediction2 = _run_infer_with_server(context, data_directory_path, parallelism, determinism_check=percentage)
 
         is_deterministic = numpy.allclose(prediction.loc[prediction2.index, "prediction"], prediction2["prediction"], atol=tolerance)
         context.report_determinism(is_deterministic)
@@ -152,18 +171,56 @@ def execute(
             train_function,
             default_values,
             {
-                "datasets": datasets,
+                "datasets": [],
             }
         )
 
+    def get_parallelism(
+        output_file_path: str,
+    ):
+        def get_value() -> int:
+            if not is_parallelism_supported:
+                return 1
+
+            key = "INFER_PARALLELISM"
+            value = module.get_value(key, default=None)
+
+            if value is None:
+                print(f"[parallelism] `{key}` not set, not using parallelism", file=sys.stderr)
+                return 1
+
+            if not isinstance(value, int):
+                print(f"[parallelism] `{key}` must be an int", file=sys.stderr)
+                return 1
+
+            cpu_count = os.cpu_count() or 1
+            if value > cpu_count:
+                print(f"[parallelism] `{key}` must be at most the number of CPUs ({cpu_count})", file=sys.stderr)
+                value = cpu_count
+            elif value == 0:
+                print(f"[parallelism] using all available CPUs for inference", file=sys.stderr)
+                value = cpu_count
+            elif value < 1:
+                print(f"[parallelism] `{key}` must be at least 1", file=sys.stderr)
+                value = 1
+
+            return value
+
+        with open(output_file_path, "w") as output_file:
+            value = get_value()
+            output_file.write(str(value))
+
     def infer(
         server_endpoint: ServerEndpointType,
+        worker_index: Optional[int],
     ):
-        context.trip_data_fuse()
-
         with os_create_client_socket() as client:
             os_connect(client, server_endpoint)
             remote = Remote(client)
+
+            if worker_index is not None:
+                from crunch import monkey_patches
+                monkey_patches.SHOULD_PRINT_PREFIX_WHEN_POSSIBLE = f"worker:{worker_index}"
 
             infer_function = module.get_function("infer")
 
@@ -181,6 +238,7 @@ def execute(
 
     return {
         "train": train,
+        "get_parallelism": get_parallelism,
         "infer": infer,
     }
 
@@ -291,25 +349,46 @@ class RemoteCommand(IntEnum):
         return command, value
 
 
+def _new_empty_worker_dict(slices: List[Any]) -> List[List[Any]]:
+    return [
+        []
+        for _ in range(len(slices))
+    ]
+
+
+def _collect_worker_dict_values(slices: List[Any], worker_dict: List[List[T]]) -> Iterable[T]:
+    for index in range(len(slices)):
+        for value in worker_dict[index]:
+            yield value
+
+
 def _run_infer_with_server(
     context: "RunnerContext",
     data_directory_path: str,
+    parallelism: int,
     determinism_check: Union[Literal[False], float],
 ) -> pandas.DataFrame:
     x_test_name = "X_test.reduced.parquet" if context.is_local else "X_test.parquet"
     x_test = pandas.read_parquet(os.path.join(data_directory_path, x_test_name))
 
+    datasets: List[pandas.DataFrame] = []
+    for _, dataset in x_test.groupby(x_test.index.get_level_values("id")):
+        datasets.append(dataset)
+
     if determinism_check is not False:
-        ids = sorted(set(x_test.index.get_level_values("id")))
-        determinism_slice = slice(None, int(len(ids) * determinism_check))
-        x_test = x_test.loc[x_test.index.get_level_values("id").isin(ids[determinism_slice])]
+        determinism_slice = slice(None, int(len(datasets) * determinism_check))
+        datasets = datasets[determinism_slice]
 
-    server, endpoint = os_create_server_socket()
+    slices = _split_into_batches(len(datasets), parallelism)
 
-    predicted_values = []
-    prediction_index = []
+    predicted_values_by_worker: List[List[float]] = _new_empty_worker_dict(slices)
+    prediction_index_by_worker: List[List[Tuple[int, int]]] = _new_empty_worker_dict(slices)
 
-    def run():
+    def run(server: socket, worker_index: int):
+        start_index, end_index = slices[worker_index]
+        predicted_values = predicted_values_by_worker[worker_index]
+        prediction_index = prediction_index_by_worker[worker_index]
+
         client, _ = os_accept(server)
         with client:
             server.close()
@@ -318,7 +397,7 @@ def _run_infer_with_server(
 
             remote.expect(RemoteCommand.READY)
 
-            for _, dataset in x_test.groupby(x_test.index.get_level_values("id")):
+            for dataset in datasets[start_index:end_index]:
                 remote.send(RemoteCommand.NEW_TIMESERIES)
 
                 historical, online = _split_periods(dataset, online_values=False)
@@ -328,7 +407,7 @@ def _run_infer_with_server(
                 for index, value in online.items():  # pyright: ignore[reportAttributeAccessIssue]
                     remote.send(RemoteCommand.ONLINE_POINT, value)
 
-                    prediction = remote.expect(RemoteCommand.NEW_PREDICTION)
+                    prediction = cast(float, remote.expect(RemoteCommand.NEW_PREDICTION))
                     predicted_values.append(prediction)
                     prediction_index.append(index)
 
@@ -336,45 +415,54 @@ def _run_infer_with_server(
 
             remote.send(RemoteCommand.END)
 
-    def run_with_catch():
+    def run_with_catch(server: socket, worker_index: int):
         try:
-            run()
+            run(server, worker_index)
         except Exception as error:
             context.log(f"error in data thread: {error}")
 
-    thread = Thread(target=run_with_catch, daemon=True)
-    thread.start()
+    def do_execute(worker_index: int, is_single: bool):
+        server, endpoint = os_create_server_socket()
 
-    if crunch_version < "11.6.0":  # temporary workaround for older versions
-        context.execute(
-            command="infer",
-            parameters={
-                "determinism_check": determinism_check,
-                "server_endpoint": endpoint,
-            },
-        )
+        with server:
+            thread = Thread(target=run_with_catch, args=(server, worker_index), daemon=True)
+            thread.start()
+
+            context.execute(
+                command="infer",
+                parameters={
+                    "server_endpoint": endpoint,
+                    "worker_index": None if is_single else worker_index,
+                },
+                span_hidden_parameters=[
+                    "server_endpoint",
+                ],
+                span_attributes={
+                    "determinism_check": determinism_check,
+                },
+                install_data_fuse=False,
+            )
+
+            thread.join()
+
+    if parallelism == 1:
+        do_execute(0, True)
     else:
-        context.execute(
-            command="infer",
-            parameters={
-                "server_endpoint": endpoint,
-            },
-            span_hidden_parameters=[
-                "server_endpoint",
-            ],
-            span_attributes={
-                "determinism_check": determinism_check,
-            },
-        )
+        threads: List[Thread] = []
+        for worker_index in range(len(slices)):
+            thread = Thread(target=do_execute, args=(worker_index, False), daemon=True)
+            thread.start()
+            threads.append(thread)
 
-    thread.join()
+        for thread in threads:
+            thread.join()
 
     return pandas.DataFrame(
         data={
-            "prediction": predicted_values,
+            "prediction": _collect_worker_dict_values(slices, predicted_values_by_worker),
         },
         index=pandas.MultiIndex.from_tuples(
-            prediction_index,
+            _collect_worker_dict_values(slices, prediction_index_by_worker),
             names=["id", "time"],
         ),
     )
@@ -541,14 +629,31 @@ def _run_with_double_protection(
 def _split_periods(
     dataset: pandas.DataFrame,
     online_values: bool = False,
-):
+) -> Tuple[List[Tuple[int, int]], List[float]]:
     historical = dataset[dataset["period"] == 1]["value"].values
     online = dataset[dataset["period"] == 2]["value"]
 
     if online_values:
         online = online.values
 
-    return historical, online
+    return historical, online  # pyright: ignore[reportReturnType]
+
+
+def _split_into_batches(element_count: int, batch_count: int) -> List[Tuple[int, int]]:
+    batch_size, remainder = divmod(element_count, batch_count)
+
+    indices = []
+
+    start = 0
+    for index in range(batch_count):
+        extra = 1 if index < remainder else 0
+
+        end = start + batch_size + extra
+        indices.append((start, end))
+
+        start = end
+
+    return indices
 
 
 def _post_process_infer_yield_result(result: Any) -> Any:
