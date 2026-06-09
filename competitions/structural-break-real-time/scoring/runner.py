@@ -228,17 +228,20 @@ def execute(
 
             infer_function = module.get_function("infer")
 
-            _run_with_double_protection(
-                remote=remote,
-                consumer_factory=lambda datasets: smart_call(
-                    infer_function,
-                    default_values,
-                    {
-                        "datasets": datasets,
-                    },
-                ),
-                post_processor=_post_process_infer_yield_result,
-            )
+            try:
+                _run_with_double_protection(
+                    remote=remote,
+                    consumer_factory=lambda datasets: smart_call(
+                        infer_function,
+                        default_values,
+                        {
+                            "datasets": datasets,
+                        },
+                    ),
+                    post_processor=_post_process_infer_yield_result,
+                )
+            except RemoteClosed:
+                print("remote connection closed", file=sys.stderr)
 
     return {
         "train": train,
@@ -271,9 +274,6 @@ class Remote:
 
     def receive(self) -> Tuple["RemoteCommand", Union[float, int, None]]:
         data = self.receive_raw(1 + 4)
-        if not data:
-            raise RemoteError("connection closed by client")
-
         return RemoteCommand.decode(data)
 
     def receive_raw(self, length: int) -> bytes:
@@ -281,7 +281,7 @@ class Remote:
         while len(data) < length:
             packet = self._client.recv(length - len(data))
             if not packet:
-                raise RemoteError("connection closed by client")
+                raise RemoteClosed("connection closed by client")
             data.extend(packet)
 
         return bytes(data)
@@ -311,6 +311,10 @@ class Remote:
 
 
 class RemoteError(RuntimeError):
+    pass
+
+
+class RemoteClosed(RemoteError):
     pass
 
 
@@ -438,7 +442,6 @@ def _run_infer_with_server(
                 remote.send(RemoteCommand.END)
         except Exception as error:
             context.log(f"error in data thread: {error}")
-            os._exit(1)  # in a fork, so its fine
 
     def do_execute(worker_index: int, output_file_path: Optional[str]):
         predicted_values: List[float] = []
@@ -481,31 +484,79 @@ def _run_infer_with_server(
     if parallelism == 1:
         return do_execute(0, None)
     else:
-        fork = multiprocessing.get_context("fork")
+        try:
+            fork = multiprocessing.get_context("fork")
 
-        processes: List[multiprocessing.Process] = []
-        temp_files: List[NamedTemporaryFile] = []  # pyright: ignore[reportGeneralTypeIssues]
+            processes: List[multiprocessing.Process] = []
+            temp_files: List[NamedTemporaryFile] = []  # pyright: ignore[reportGeneralTypeIssues]
 
-        for worker_index in range(len(slices)):
-            temp_file = stack.enter_context(NamedTemporaryFile(prefix=f"prediction_{worker_index}_", suffix=".parquet"))
+            for worker_index in range(len(slices)):
+                temp_file = stack.enter_context(NamedTemporaryFile(prefix=f"prediction_{worker_index}_", suffix=".parquet"))
 
-            process = fork.Process(  # pyright: ignore[reportAttributeAccessIssue]
-                target=do_execute,
-                args=(worker_index, temp_file.name),
-            )
-            process.start()
+                process = fork.Process(  # pyright: ignore[reportAttributeAccessIssue]
+                    target=do_execute,
+                    args=(worker_index, temp_file.name, ),
+                )
 
-            processes.append(process)
-            temp_files.append(temp_file)
+                processes.append(process)
+                temp_files.append(temp_file)
 
-        prediction_parts = []
-        for process, temp_file in zip(processes, temp_files):
+            _start_processes_and_wait(context, processes)
+
+            prediction_parts = []
+            for process, temp_file in zip(processes, temp_files):
+                process.join()
+
+                prediction = pandas.read_parquet(temp_file.name)
+                prediction_parts.append(prediction)
+
+            return pandas.concat(prediction_parts)
+        except Exception as error:
+            context.log(f"error during inference: {error}", error=True)
+            exit(1)
+
+
+def _start_processes_and_wait(
+    context: "RunnerContext",
+    processes: List["multiprocessing.Process"],
+    dead_check_interval=5.0,
+):
+    for process in processes:
+        process.start()
+
+    try:
+        for index, process in enumerate(processes):
+            while True:
+                try:
+                    process.join(timeout=dead_check_interval)
+
+                    exit_code = process.exitcode
+                    if exit_code != 0:
+                        raise ProtocolError(f"worker {index} (pid {process.pid}) exited with code {exit_code}")
+
+                    break
+                except Exception:
+                    dead = [
+                        process
+                        for process in processes
+                        if not process.is_alive() and process.exitcode != 0
+                    ]
+
+                    if dead:
+                        pid_to_exit_codes = ", ".join([f"{process.pid}={process.exitcode}" for process in dead])
+                        raise ProtocolError(f"{len(dead)} worker(s) died silently (exit codes: {pid_to_exit_codes})")
+
+    except Exception:
+        for index, process in enumerate(processes):
+            if process.is_alive():
+                process.kill()
+                context.log(f"killed worker {index} (pid {process.pid}) due to error in another worker", error=True)
+
+        raise
+
+    finally:
+        for process in processes:
             process.join()
-
-            prediction = pandas.read_parquet(temp_file.name)
-            prediction_parts.append(prediction)
-
-        return pandas.concat(prediction_parts)
 
 
 class ProtocolError(RuntimeError):
