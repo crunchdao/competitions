@@ -1,16 +1,19 @@
+import multiprocessing
 import os
 import sys
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from enum import Enum, IntEnum
 from socket import IPPROTO_TCP, SOCK_STREAM, TCP_NODELAY, socket
 from tempfile import NamedTemporaryFile
 from threading import Thread
 from types import GeneratorType
-from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Iterable, Iterator, List, Literal, Optional, Tuple, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Iterator, List, Literal, Optional, Tuple, TypeVar, Union, cast
 from uuid import uuid4
 
 import numpy
 import pandas
+from crunch.runner.tracing import RunnerTracer, to_execute_span_attributes
 from crunch.utils import smart_call
 
 if TYPE_CHECKING:
@@ -108,6 +111,7 @@ def load_data(
 
 def run(
     context: "RunnerContext",
+    tracer: "RunnerTracer",
     data_directory_path: str,
     prediction_directory_path: str,
 ):
@@ -116,8 +120,8 @@ def run(
             command="train",
         )
 
-    with NamedTemporaryFile() as temp_file:
-        temp_file.close()
+    with named_temp_file() as temp_file:
+        os.chmod(temp_file.name, 0o666)
 
         context.execute(
             command="get_parallelism",
@@ -132,7 +136,7 @@ def run(
 
         context.log(f"using a parallelism of {parallelism}")
 
-    prediction = _run_infer_with_server(context, data_directory_path, parallelism, determinism_check=False)
+    prediction = _run_infer(context, tracer, data_directory_path, parallelism, determinism_check=False)
 
     if context.is_determinism_check_enabled:
         percentage = 0.3
@@ -140,7 +144,7 @@ def run(
 
         context.log(f"checking determinism by executing the inference again with {percentage * 100:.0f}% of the data (tolerance: {tolerance})")
 
-        prediction2 = _run_infer_with_server(context, data_directory_path, parallelism, determinism_check=percentage)
+        prediction2 = _run_infer(context, tracer, data_directory_path, parallelism, determinism_check=percentage)
 
         is_deterministic = numpy.allclose(prediction.loc[prediction2.index, "prediction"], prediction2["prediction"], atol=tolerance)
         context.report_determinism(is_deterministic)
@@ -171,7 +175,7 @@ def execute(
             train_function,
             default_values,
             {
-                "datasets": [],
+                "datasets": datasets,
             }
         )
 
@@ -265,9 +269,6 @@ class Remote:
     def __init__(self, client: socket):
         self._client = client
 
-        self._send_wasted_time_ns = 0.0
-        self._receive_wasted_time_ns = 0.0
-
     def receive(self) -> Tuple["RemoteCommand", Union[float, int, None]]:
         data = self.receive_raw(1 + 4)
         if not data:
@@ -349,17 +350,42 @@ class RemoteCommand(IntEnum):
         return command, value
 
 
-def _new_empty_worker_dict(slices: List[Any]) -> List[List[Any]]:
-    return [
-        []
-        for _ in range(len(slices))
-    ]
+@contextmanager
+def named_temp_file(**kwargs):
+    file = NamedTemporaryFile(delete=False, **kwargs)
+    file.close()
+
+    try:
+        yield file
+    finally:
+        os.unlink(file.name)
 
 
-def _collect_worker_dict_values(slices: List[Any], worker_dict: List[List[T]]) -> Iterable[T]:
-    for index in range(len(slices)):
-        for value in worker_dict[index]:
-            yield value
+def _run_infer(
+    context: "RunnerContext",
+    tracer: "RunnerTracer",
+    data_directory_path: str,
+    parallelism: int,
+    determinism_check: Union[Literal[False], float],
+) -> pandas.DataFrame:
+    span_attributes = to_execute_span_attributes(
+        command="infer",
+        parameters={
+            "parallelism": parallelism,
+        },
+        span_attributes={
+            "determinism_check": determinism_check,
+        }
+    )
+
+    with tracer.span("execute", attributes=span_attributes), ExitStack() as stack:
+        return _run_infer_with_server(
+            context,
+            data_directory_path,
+            parallelism,
+            determinism_check,
+            stack,
+        )
 
 
 def _run_infer_with_server(
@@ -367,6 +393,7 @@ def _run_infer_with_server(
     data_directory_path: str,
     parallelism: int,
     determinism_check: Union[Literal[False], float],
+    stack: ExitStack,
 ) -> pandas.DataFrame:
     x_test_name = "X_test.reduced.parquet" if context.is_local else "X_test.parquet"
     x_test = pandas.read_parquet(os.path.join(data_directory_path, x_test_name))
@@ -381,91 +408,104 @@ def _run_infer_with_server(
 
     slices = _split_into_batches(len(datasets), parallelism)
 
-    predicted_values_by_worker: List[List[float]] = _new_empty_worker_dict(slices)
-    prediction_index_by_worker: List[List[Tuple[int, int]]] = _new_empty_worker_dict(slices)
-
-    def run(server: socket, worker_index: int):
-        start_index, end_index = slices[worker_index]
-        predicted_values = predicted_values_by_worker[worker_index]
-        prediction_index = prediction_index_by_worker[worker_index]
-
-        client, _ = os_accept(server)
-        with client:
-            server.close()
-
-            remote = Remote(client)
-
-            remote.expect(RemoteCommand.READY)
-
-            for dataset in datasets[start_index:end_index]:
-                remote.send(RemoteCommand.NEW_TIMESERIES)
-
-                historical, online = _split_periods(dataset, online_values=False)
-                remote.send(RemoteCommand.HISTORICAL_DATA, len(historical))
-                remote.send_raw(historical.astype(numpy.float32).tobytes())  # pyright: ignore[reportAttributeAccessIssue]
-
-                for index, value in online.items():  # pyright: ignore[reportAttributeAccessIssue]
-                    remote.send(RemoteCommand.ONLINE_POINT, value)
-
-                    prediction = cast(float, remote.expect(RemoteCommand.NEW_PREDICTION))
-                    predicted_values.append(prediction)
-                    prediction_index.append(index)
-
-                remote.send(RemoteCommand.END_TIMESERIES)
-
-            remote.send(RemoteCommand.END)
-
-    def run_with_catch(server: socket, worker_index: int):
+    def run_server(server: socket, worker_index: int, predicted_values: List[float], prediction_index: List[Tuple[int, int]]):
         try:
-            run(server, worker_index)
+            start_index, end_index = slices[worker_index]
+
+            client, _ = os_accept(server)
+            with client:
+                server.close()
+
+                remote = Remote(client)
+                remote.expect(RemoteCommand.READY)
+
+                for dataset in datasets[start_index:end_index]:
+                    remote.send(RemoteCommand.NEW_TIMESERIES)
+
+                    historical, online = _split_periods(dataset, online_values=False)
+                    remote.send(RemoteCommand.HISTORICAL_DATA, len(historical))
+                    remote.send_raw(historical.astype(numpy.float32).tobytes())  # pyright: ignore[reportAttributeAccessIssue]
+
+                    for index, value in online.items():
+                        remote.send(RemoteCommand.ONLINE_POINT, value)
+
+                        prediction = remote.expect(RemoteCommand.NEW_PREDICTION)
+                        predicted_values.append(prediction)  # pyright: ignore[reportArgumentType]
+                        prediction_index.append(index)  # pyright: ignore[reportArgumentType]
+
+                    remote.send(RemoteCommand.END_TIMESERIES)
+
+                remote.send(RemoteCommand.END)
         except Exception as error:
             context.log(f"error in data thread: {error}")
+            os._exit(1)  # in a fork, so its fine
 
-    def do_execute(worker_index: int, is_single: bool):
+    def do_execute(worker_index: int, output_file_path: Optional[str]):
+        predicted_values: List[float] = []
+        prediction_index: List[Tuple[int, int]] = []
+
         server, endpoint = os_create_server_socket()
 
         with server:
-            thread = Thread(target=run_with_catch, args=(server, worker_index), daemon=True)
+            thread = Thread(target=run_server, args=(server, worker_index, predicted_values, prediction_index), daemon=True)
             thread.start()
 
             context.execute(
                 command="infer",
                 parameters={
                     "server_endpoint": endpoint,
-                    "worker_index": None if is_single else worker_index,
+                    "worker_index": None if output_file_path is None else worker_index,
                 },
-                span_hidden_parameters=[
-                    "server_endpoint",
-                ],
-                span_attributes={
-                    "determinism_check": determinism_check,
-                },
+                trace=False,
                 install_data_fuse=False,
             )
 
             thread.join()
 
+        prediction = pandas.DataFrame(
+            data={
+                "prediction": predicted_values,
+            },
+            index=pandas.MultiIndex.from_tuples(
+                prediction_index,
+                names=["id", "time"],
+            ),
+        )
+
+        if output_file_path is None:
+            return prediction
+
+        prediction.to_parquet(output_file_path)
+        os._exit(0)  # in a fork, so its fine
+
     if parallelism == 1:
-        do_execute(0, True)
+        return do_execute(0, None)
     else:
-        threads: List[Thread] = []
+        fork = multiprocessing.get_context("fork")
+
+        processes: List[multiprocessing.Process] = []
+        temp_files: List[NamedTemporaryFile] = []  # pyright: ignore[reportGeneralTypeIssues]
+
         for worker_index in range(len(slices)):
-            thread = Thread(target=do_execute, args=(worker_index, False), daemon=True)
-            thread.start()
-            threads.append(thread)
+            temp_file = stack.enter_context(NamedTemporaryFile(prefix=f"prediction_{worker_index}_", suffix=".parquet"))
 
-        for thread in threads:
-            thread.join()
+            process = fork.Process(  # pyright: ignore[reportAttributeAccessIssue]
+                target=do_execute,
+                args=(worker_index, temp_file.name),
+            )
+            process.start()
 
-    return pandas.DataFrame(
-        data={
-            "prediction": _collect_worker_dict_values(slices, predicted_values_by_worker),
-        },
-        index=pandas.MultiIndex.from_tuples(
-            _collect_worker_dict_values(slices, prediction_index_by_worker),
-            names=["id", "time"],
-        ),
-    )
+            processes.append(process)
+            temp_files.append(temp_file)
+
+        prediction_parts = []
+        for process, temp_file in zip(processes, temp_files):
+            process.join()
+
+            prediction = pandas.read_parquet(temp_file.name)
+            prediction_parts.append(prediction)
+
+        return pandas.concat(prediction_parts)
 
 
 class ProtocolError(RuntimeError):
@@ -629,7 +669,7 @@ def _run_with_double_protection(
 def _split_periods(
     dataset: pandas.DataFrame,
     online_values: bool = False,
-) -> Tuple[List[Tuple[int, int]], List[float]]:
+) -> Tuple[List[Tuple[int, int]], pandas.Series]:
     historical = dataset[dataset["period"] == 1]["value"].values
     online = dataset[dataset["period"] == 2]["value"]
 
