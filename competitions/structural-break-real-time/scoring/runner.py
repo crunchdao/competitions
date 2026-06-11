@@ -250,7 +250,7 @@ def execute(
                     post_processor=_post_process_infer_yield_result,
                 )
             except RemoteClosed:
-                print("remote connection closed", file=sys.stderr)
+                print("[debug] remote connection closed", file=sys.stderr)
 
     return {
         "train": train,
@@ -450,7 +450,7 @@ def _run_infer_with_server(
 
                 remote.send(RemoteCommand.END)
         except Exception as error:
-            context.log(f"error in data thread: {error}")
+            context.log(f"[debug] error in data thread: {error}")
 
     def do_execute(worker_index: int, output_file_path: Optional[str]):
         predicted_values: List[float] = []
@@ -521,8 +521,8 @@ def _run_infer_with_server(
 
             return pandas.concat(prediction_parts)
         except Exception as error:
-            context.log(f"error during inference: {error}", error=True)
-            exit(1)
+            context.log(f"[debug] error during inference: {error}", error=True)
+            raise click.Abort()
 
 
 def _start_processes_and_wait(
@@ -546,20 +546,25 @@ def _start_processes_and_wait(
                     break
                 except Exception:
                     dead = [
-                        process
-                        for process in processes
+                        (index, process)
+                        for index, process in enumerate(processes)
                         if not process.is_alive() and process.exitcode != 0
                     ]
 
                     if dead:
-                        pid_to_exit_codes = ", ".join([f"{process.pid}={process.exitcode}" for process in dead])
+                        pid_to_exit_codes = ", ".join([f"{index}={process.exitcode}" for index, process in dead])
                         raise ProtocolError(f"{len(dead)} worker(s) died silently (exit codes: {pid_to_exit_codes})")
 
     except Exception:
+        killed_index = []
         for index, process in enumerate(processes):
             if process.is_alive():
                 process.kill()
-                context.log(f"killed worker {index} (pid {process.pid}) due to error in another worker", error=True)
+                killed_index.append(str(index))
+
+        if killed_index:
+            pid_to_exit_codes = ", ".join(killed_index)
+            context.log(f"[debug] {len(killed_index)} worker(s) killed due to error in another worker ({pid_to_exit_codes})", error=True)
 
         raise
 
