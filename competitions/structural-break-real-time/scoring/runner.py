@@ -561,7 +561,7 @@ def _start_processes_and_wait(
 
                     if dead:
                         pid_to_exit_codes = ", ".join([f"{index}={process.exitcode}" for index, process in dead])
-                        raise ProtocolError(f"{len(dead)} worker(s) died silently (exit codes: {pid_to_exit_codes})")
+                        raise ProtocolError(f"{len(dead)} worker(s) died (exit codes: {pid_to_exit_codes})")
 
     except Exception:
         killed_index = []
