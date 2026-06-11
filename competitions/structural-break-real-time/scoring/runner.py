@@ -278,11 +278,15 @@ def _load_train(data_directory_path: str):
 
 class Remote:
 
+    PACKET_SIZE = 1 + 4
+
     def __init__(self, client: socket):
         self._client = client
 
     def receive(self) -> Tuple["RemoteCommand", Union[float, int, None]]:
-        data = self.receive_raw(1 + 4)
+        data = self.receive_raw(self.PACKET_SIZE)
+        assert len(data) == self.PACKET_SIZE
+
         return RemoteCommand.decode(data)
 
     def receive_raw(self, length: int) -> bytes:
@@ -337,7 +341,7 @@ class RemoteCommand(IntEnum):
     NEW_PREDICTION = 100
 
     def encode(self, value: Union[float, int]) -> bytes:
-        data = bytearray(1 + 4)
+        data = bytearray(Remote.PACKET_SIZE)
         data[0] = self.value
 
         if self == RemoteCommand.HISTORICAL_DATA:
