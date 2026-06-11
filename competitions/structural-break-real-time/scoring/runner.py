@@ -119,7 +119,7 @@ def run(
 ):
     if CRUNCH_VERSION < "11.7.0":
         context.log(f"detected crunch-cli version {CRUNCH_VERSION}, but runner requires version 11.7.0 or higher", error=True)
-        context.log(f"upgrade by running `pip install --upgrade crunch-cli`", error=True)
+        context.log(f"upgrade by running `pip install --upgrade crunch-cli` and restart your kernel (if you are on Colab/Jupyter)", error=True)
         raise click.Abort()
 
     if context.force_first_train:
