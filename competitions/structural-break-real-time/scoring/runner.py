@@ -491,8 +491,12 @@ def _run_infer_with_server(
         if output_file_path is None:
             return prediction
 
-        prediction.to_parquet(output_file_path)
-        os._exit(0)  # in a fork, so its fine
+        try:
+            prediction.to_parquet(output_file_path)
+            os._exit(0)  # in a fork, so its fine
+        except Exception as exception:
+            print(f"worker write failed: {exception}", file=sys.stderr)
+            os._exit(1)  # in a fork, so its fine
 
     if parallelism == 1:
         return do_execute(0, None)
