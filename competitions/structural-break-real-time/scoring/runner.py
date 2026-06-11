@@ -11,8 +11,10 @@ from types import GeneratorType
 from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Iterator, List, Literal, Optional, Tuple, TypeVar, Union, cast
 from uuid import uuid4
 
+import click
 import numpy
 import pandas
+from crunch.__version__ import __version__ as CRUNCH_VERSION
 from crunch.runner.tracing import RunnerTracer, to_execute_span_attributes
 from crunch.utils import smart_call
 
@@ -115,6 +117,11 @@ def run(
     data_directory_path: str,
     prediction_directory_path: str,
 ):
+    if CRUNCH_VERSION < "11.7.0":
+        context.log(f"detected crunch-cli version {CRUNCH_VERSION}, but runner requires version 11.7.0 or higher", error=True)
+        context.log(f"upgrade by running `pip install --upgrade crunch-cli`", error=True)
+        raise click.Abort()
+
     if context.force_first_train:
         context.execute(
             command="train",
