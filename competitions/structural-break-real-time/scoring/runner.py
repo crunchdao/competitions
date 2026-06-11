@@ -194,22 +194,22 @@ def execute(
             value = module.get_value(key, default=None)
 
             if value is None:
-                print(f"[parallelism] `{key}` not set, not using parallelism", file=sys.stderr)
+                print(f"[parallelism (beta)] `{key}` not set, not using parallelism", file=sys.stderr)
                 return 1
 
             if not isinstance(value, int):
-                print(f"[parallelism] `{key}` must be an int", file=sys.stderr)
+                print(f"[parallelism (beta)] `{key}` must be an int", file=sys.stderr)
                 return 1
 
             cpu_count = os.cpu_count() or 1
             if value > cpu_count:
-                print(f"[parallelism] `{key}` must be at most the number of CPUs ({cpu_count})", file=sys.stderr)
+                print(f"[parallelism (beta)] `{key}` must be at most the number of CPUs ({cpu_count})", file=sys.stderr)
                 value = cpu_count
             elif value == 0:
-                print(f"[parallelism] using all available CPUs for inference", file=sys.stderr)
+                print(f"[parallelism (beta)] using all available CPUs for inference", file=sys.stderr)
                 value = cpu_count
             elif value < 1:
-                print(f"[parallelism] `{key}` must be at least 1", file=sys.stderr)
+                print(f"[parallelism (beta)] `{key}` must be at least 1", file=sys.stderr)
                 value = 1
 
             return value
