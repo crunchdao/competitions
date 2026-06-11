@@ -1,15 +1,21 @@
+import multiprocessing
 import os
+import sys
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from enum import Enum, IntEnum
 from socket import IPPROTO_TCP, SOCK_STREAM, TCP_NODELAY, socket
+from tempfile import NamedTemporaryFile
 from threading import Thread
 from types import GeneratorType
-from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Iterator, Literal, Optional, Tuple, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Iterator, List, Literal, Optional, Tuple, TypeVar, Union, cast
 from uuid import uuid4
 
+import click
 import numpy
 import pandas
-from crunch.__version__ import __version__ as crunch_version
+from crunch.__version__ import __version__ as CRUNCH_VERSION
+from crunch.runner.tracing import RunnerTracer, to_execute_span_attributes
 from crunch.utils import smart_call
 
 if TYPE_CHECKING:
@@ -31,6 +37,7 @@ if os.name == "nt":
     from socket import AF_INET
 
     ServerEndpointType = int
+    is_parallelism_supported = False
 
     def os_register_at_fork(*, after_in_child: Optional[Callable] = None, **kwargs):
         pass
@@ -58,6 +65,7 @@ else:
     from socket import AF_UNIX
 
     ServerEndpointType = str
+    is_parallelism_supported = True
 
     os_register_at_fork = os.register_at_fork
 
@@ -105,15 +113,37 @@ def load_data(
 
 def run(
     context: "RunnerContext",
+    tracer: "RunnerTracer",
     data_directory_path: str,
     prediction_directory_path: str,
 ):
+    if CRUNCH_VERSION < "11.7.0":
+        context.log(f"detected crunch-cli version {CRUNCH_VERSION}, but runner requires version 11.7.0 or higher", error=True)
+        context.log(f"upgrade by running `pip install --upgrade crunch-cli` and restart your kernel (if you are on Colab/Jupyter)", error=True)
+        raise click.Abort()
+
     if context.force_first_train:
         context.execute(
             command="train",
         )
 
-    prediction = _run_infer_with_server(context, data_directory_path, determinism_check=False)
+    with named_temp_file() as temp_file:
+        os.chmod(temp_file.name, 0o666)
+
+        context.execute(
+            command="get_parallelism",
+            parameters={
+                "output_file_path": temp_file.name,
+            },
+            install_data_fuse=False,
+        )
+
+        with open(temp_file.name, "r") as fd:
+            parallelism = int(fd.read())
+
+        context.log(f"using a parallelism of {parallelism}")
+
+    prediction = _run_infer(context, tracer, data_directory_path, parallelism, determinism_check=False)
 
     if context.is_determinism_check_enabled:
         percentage = 0.3
@@ -121,7 +151,7 @@ def run(
 
         context.log(f"checking determinism by executing the inference again with {percentage * 100:.0f}% of the data (tolerance: {tolerance})")
 
-        prediction2 = _run_infer_with_server(context, data_directory_path, determinism_check=percentage)
+        prediction2 = _run_infer(context, tracer, data_directory_path, parallelism, determinism_check=percentage)
 
         is_deterministic = numpy.allclose(prediction.loc[prediction2.index, "prediction"], prediction2["prediction"], atol=tolerance)
         context.report_determinism(is_deterministic)
@@ -156,31 +186,75 @@ def execute(
             }
         )
 
+    def get_parallelism(
+        output_file_path: str,
+    ):
+        def get_value() -> int:
+            key = "INFER_PARALLELISM"
+            value = module.get_value(key, default=None)
+
+            if value is None:
+                print(f"[parallelism (beta)] `{key}` not set, not using parallelism", file=sys.stderr)
+                return 1
+
+            if not isinstance(value, int):
+                print(f"[parallelism (beta)] `{key}` must be an int", file=sys.stderr)
+                return 1
+
+            cpu_count = os.cpu_count() or 1
+            if value > cpu_count:
+                print(f"[parallelism (beta)] `{key}` must be at most the number of CPUs ({cpu_count})", file=sys.stderr)
+                value = cpu_count
+            elif value == 0:
+                print(f"[parallelism (beta)] using all available CPUs for inference", file=sys.stderr)
+                value = cpu_count
+            elif value < 1:
+                print(f"[parallelism (beta)] `{key}` must be at least 1", file=sys.stderr)
+                value = 1
+
+            return value
+
+        with open(output_file_path, "w") as output_file:
+            value = get_value()
+
+            if value != 1 and not is_parallelism_supported:
+                print(f"[parallelism] not supported on this platform, will still works in the cloud environment, using 1 for now", file=sys.stderr)
+                value = 1
+
+            output_file.write(str(value))
+
     def infer(
         server_endpoint: ServerEndpointType,
+        worker_index: Optional[int],
     ):
-        context.trip_data_fuse()
-
         with os_create_client_socket() as client:
             os_connect(client, server_endpoint)
             remote = Remote(client)
 
+            if worker_index is not None:
+                from crunch import monkey_patches
+                monkey_patches.SHOULD_PRINT_PREFIX_WHEN_POSSIBLE = f"worker:{worker_index}"
+
             infer_function = module.get_function("infer")
 
-            _run_with_double_protection(
-                remote=remote,
-                consumer_factory=lambda datasets: smart_call(
-                    infer_function,
-                    default_values,
-                    {
-                        "datasets": datasets,
-                    },
-                ),
-                post_processor=_post_process_infer_yield_result,
-            )
+            try:
+                _run_with_double_protection(
+                    remote=remote,
+                    consumer_factory=lambda datasets: smart_call(
+                        infer_function,
+                        default_values,
+                        {
+                            "datasets": datasets,
+                        },
+                    ),
+                    post_processor=_post_process_infer_yield_result,
+                )
+            except RemoteClosed:
+                print("[debug] remote connection closed", file=sys.stderr)
 
     return {
         "train": train,
+        "get_parallelism": get_parallelism,
         "infer": infer,
     }
 
@@ -204,16 +278,14 @@ def _load_train(data_directory_path: str):
 
 class Remote:
 
+    PACKET_SIZE = 1 + 4
+
     def __init__(self, client: socket):
         self._client = client
 
-        self._send_wasted_time_ns = 0.0
-        self._receive_wasted_time_ns = 0.0
-
     def receive(self) -> Tuple["RemoteCommand", Union[float, int, None]]:
-        data = self.receive_raw(1 + 4)
-        if not data:
-            raise RemoteError("connection closed by client")
+        data = self.receive_raw(self.PACKET_SIZE)
+        assert len(data) == self.PACKET_SIZE
 
         return RemoteCommand.decode(data)
 
@@ -222,7 +294,7 @@ class Remote:
         while len(data) < length:
             packet = self._client.recv(length - len(data))
             if not packet:
-                raise RemoteError("connection closed by client")
+                raise RemoteClosed("connection closed by client")
             data.extend(packet)
 
         return bytes(data)
@@ -255,6 +327,10 @@ class RemoteError(RuntimeError):
     pass
 
 
+class RemoteClosed(RemoteError):
+    pass
+
+
 class RemoteCommand(IntEnum):
     READY = 1
     NEW_TIMESERIES = 2
@@ -265,7 +341,7 @@ class RemoteCommand(IntEnum):
     NEW_PREDICTION = 100
 
     def encode(self, value: Union[float, int]) -> bytes:
-        data = bytearray(1 + 4)
+        data = bytearray(Remote.PACKET_SIZE)
         data[0] = self.value
 
         if self == RemoteCommand.HISTORICAL_DATA:
@@ -291,93 +367,218 @@ class RemoteCommand(IntEnum):
         return command, value
 
 
+@contextmanager
+def named_temp_file(**kwargs):
+    file = NamedTemporaryFile(delete=False, **kwargs)
+    file.close()
+
+    try:
+        yield file
+    finally:
+        os.unlink(file.name)
+
+
+def _run_infer(
+    context: "RunnerContext",
+    tracer: "RunnerTracer",
+    data_directory_path: str,
+    parallelism: int,
+    determinism_check: Union[Literal[False], float],
+) -> pandas.DataFrame:
+    span_attributes = to_execute_span_attributes(
+        command="infer",
+        parameters={
+            "parallelism": parallelism,
+        },
+        span_attributes={
+            "determinism_check": determinism_check,
+        }
+    )
+
+    with tracer.span("execute", attributes=span_attributes), ExitStack() as stack:
+        return _run_infer_with_server(
+            context,
+            data_directory_path,
+            parallelism,
+            determinism_check,
+            stack,
+        )
+
+
 def _run_infer_with_server(
     context: "RunnerContext",
     data_directory_path: str,
+    parallelism: int,
     determinism_check: Union[Literal[False], float],
+    stack: ExitStack,
 ) -> pandas.DataFrame:
     x_test_name = "X_test.reduced.parquet" if context.is_local else "X_test.parquet"
     x_test = pandas.read_parquet(os.path.join(data_directory_path, x_test_name))
 
+    datasets: List[pandas.DataFrame] = []
+    for _, dataset in x_test.groupby(x_test.index.get_level_values("id")):
+        datasets.append(dataset)
+
     if determinism_check is not False:
-        ids = sorted(set(x_test.index.get_level_values("id")))
-        determinism_slice = slice(None, int(len(ids) * determinism_check))
-        x_test = x_test.loc[x_test.index.get_level_values("id").isin(ids[determinism_slice])]
+        determinism_slice = slice(None, int(len(datasets) * determinism_check))
+        datasets = datasets[determinism_slice]
 
-    server, endpoint = os_create_server_socket()
+    slices = _split_into_batches(len(datasets), parallelism)
 
-    predicted_values = []
-    prediction_index = []
-
-    def run():
-        client, _ = os_accept(server)
-        with client:
-            server.close()
-
-            remote = Remote(client)
-
-            remote.expect(RemoteCommand.READY)
-
-            for _, dataset in x_test.groupby(x_test.index.get_level_values("id")):
-                remote.send(RemoteCommand.NEW_TIMESERIES)
-
-                historical, online = _split_periods(dataset, online_values=False)
-                remote.send(RemoteCommand.HISTORICAL_DATA, len(historical))
-                remote.send_raw(historical.astype(numpy.float32).tobytes())  # pyright: ignore[reportAttributeAccessIssue]
-
-                for index, value in online.items():  # pyright: ignore[reportAttributeAccessIssue]
-                    remote.send(RemoteCommand.ONLINE_POINT, value)
-
-                    prediction = remote.expect(RemoteCommand.NEW_PREDICTION)
-                    predicted_values.append(prediction)
-                    prediction_index.append(index)
-
-                remote.send(RemoteCommand.END_TIMESERIES)
-
-            remote.send(RemoteCommand.END)
-
-    def run_with_catch():
+    def run_server(server: socket, worker_index: int, predicted_values: List[float], prediction_index: List[Tuple[int, int]]):
         try:
-            run()
+            start_index, end_index = slices[worker_index]
+
+            client, _ = os_accept(server)
+            with client:
+                server.close()
+
+                remote = Remote(client)
+                remote.expect(RemoteCommand.READY)
+
+                for dataset in datasets[start_index:end_index]:
+                    remote.send(RemoteCommand.NEW_TIMESERIES)
+
+                    historical, online = _split_periods(dataset, online_values=False)
+                    remote.send(RemoteCommand.HISTORICAL_DATA, len(historical))
+                    remote.send_raw(historical.astype(numpy.float32).tobytes())  # pyright: ignore[reportAttributeAccessIssue]
+
+                    for index, value in online.items():
+                        remote.send(RemoteCommand.ONLINE_POINT, value)
+
+                        prediction = remote.expect(RemoteCommand.NEW_PREDICTION)
+                        predicted_values.append(prediction)  # pyright: ignore[reportArgumentType]
+                        prediction_index.append(index)  # pyright: ignore[reportArgumentType]
+
+                    remote.send(RemoteCommand.END_TIMESERIES)
+
+                remote.send(RemoteCommand.END)
         except Exception as error:
-            context.log(f"error in data thread: {error}")
+            context.log(f"[debug] error in data thread: {error}")
 
-    thread = Thread(target=run_with_catch, daemon=True)
-    thread.start()
+    def do_execute(worker_index: int, output_file_path: Optional[str]):
+        predicted_values: List[float] = []
+        prediction_index: List[Tuple[int, int]] = []
 
-    if crunch_version < "11.6.0":  # temporary workaround for older versions
-        context.execute(
-            command="infer",
-            parameters={
-                "determinism_check": determinism_check,
-                "server_endpoint": endpoint,
+        server, endpoint = os_create_server_socket()
+
+        with server:
+            thread = Thread(target=run_server, args=(server, worker_index, predicted_values, prediction_index), daemon=True)
+            thread.start()
+
+            context.execute(
+                command="infer",
+                parameters={
+                    "server_endpoint": endpoint,
+                    "worker_index": None if output_file_path is None else worker_index,
+                },
+                trace=False,
+                install_data_fuse=False,
+            )
+
+            thread.join()
+
+        prediction = pandas.DataFrame(
+            data={
+                "prediction": predicted_values,
             },
+            index=pandas.MultiIndex.from_tuples(
+                prediction_index,
+                names=["id", "time"],
+            ),
         )
+
+        if output_file_path is None:
+            return prediction
+
+        try:
+            prediction.to_parquet(output_file_path)
+            os._exit(0)  # in a fork, so its fine
+        except Exception as exception:
+            print(f"worker write failed: {exception}", file=sys.stderr)
+            os._exit(1)  # in a fork, so its fine
+
+    if parallelism == 1:
+        return do_execute(0, None)
     else:
-        context.execute(
-            command="infer",
-            parameters={
-                "server_endpoint": endpoint,
-            },
-            span_hidden_parameters=[
-                "server_endpoint",
-            ],
-            span_attributes={
-                "determinism_check": determinism_check,
-            },
-        )
+        try:
+            fork = multiprocessing.get_context("fork")
 
-    thread.join()
+            processes: List[multiprocessing.Process] = []
+            temp_files: List[NamedTemporaryFile] = []  # pyright: ignore[reportGeneralTypeIssues]
 
-    return pandas.DataFrame(
-        data={
-            "prediction": predicted_values,
-        },
-        index=pandas.MultiIndex.from_tuples(
-            prediction_index,
-            names=["id", "time"],
-        ),
-    )
+            for worker_index in range(len(slices)):
+                temp_file = stack.enter_context(NamedTemporaryFile(prefix=f"prediction_{worker_index}_", suffix=".parquet"))
+
+                process = fork.Process(  # pyright: ignore[reportAttributeAccessIssue]
+                    target=do_execute,
+                    args=(worker_index, temp_file.name, ),
+                )
+
+                processes.append(process)
+                temp_files.append(temp_file)
+
+            _start_processes_and_wait(context, processes)
+
+            prediction_parts = []
+            for process, temp_file in zip(processes, temp_files):
+                process.join()
+
+                prediction = pandas.read_parquet(temp_file.name)
+                prediction_parts.append(prediction)
+
+            return pandas.concat(prediction_parts)
+        except Exception as error:
+            context.log(f"[debug] error during inference: {error}", error=True)
+            raise click.Abort()
+
+
+def _start_processes_and_wait(
+    context: "RunnerContext",
+    processes: List["multiprocessing.Process"],
+    dead_check_interval=5.0,
+):
+    for process in processes:
+        process.start()
+
+    try:
+        for index, process in enumerate(processes):
+            while True:
+                try:
+                    process.join(timeout=dead_check_interval)
+
+                    exit_code = process.exitcode
+                    if exit_code != 0:
+                        raise ProtocolError(f"worker {index} (pid {process.pid}) exited with code {exit_code}")
+
+                    break
+                except Exception:
+                    dead = [
+                        (index, process)
+                        for index, process in enumerate(processes)
+                        if not process.is_alive() and process.exitcode != 0
+                    ]
+
+                    if dead:
+                        pid_to_exit_codes = ", ".join([f"{index}={process.exitcode}" for index, process in dead])
+                        raise ProtocolError(f"{len(dead)} worker(s) died (exit codes: {pid_to_exit_codes})")
+
+    except Exception:
+        killed_index = []
+        for index, process in enumerate(processes):
+            if process.is_alive():
+                process.kill()
+                killed_index.append(str(index))
+
+        if killed_index:
+            pid_to_exit_codes = ", ".join(killed_index)
+            context.log(f"[debug] {len(killed_index)} worker(s) killed due to error in another worker ({pid_to_exit_codes})", error=True)
+
+        raise
+
+    finally:
+        for process in processes:
+            process.join()
 
 
 class ProtocolError(RuntimeError):
@@ -541,14 +742,31 @@ def _run_with_double_protection(
 def _split_periods(
     dataset: pandas.DataFrame,
     online_values: bool = False,
-):
+) -> Tuple[List[Tuple[int, int]], pandas.Series]:
     historical = dataset[dataset["period"] == 1]["value"].values
     online = dataset[dataset["period"] == 2]["value"]
 
     if online_values:
         online = online.values
 
-    return historical, online
+    return historical, online  # pyright: ignore[reportReturnType]
+
+
+def _split_into_batches(element_count: int, batch_count: int) -> List[Tuple[int, int]]:
+    batch_size, remainder = divmod(element_count, batch_count)
+
+    indices = []
+
+    start = 0
+    for index in range(batch_count):
+        extra = 1 if index < remainder else 0
+
+        end = start + batch_size + extra
+        indices.append((start, end))
+
+        start = end
+
+    return indices
 
 
 def _post_process_infer_yield_result(result: Any) -> Any:
