@@ -190,9 +190,6 @@ def execute(
         output_file_path: str,
     ):
         def get_value() -> int:
-            if not is_parallelism_supported:
-                return 1
-
             key = "INFER_PARALLELISM"
             value = module.get_value(key, default=None)
 
@@ -219,6 +216,11 @@ def execute(
 
         with open(output_file_path, "w") as output_file:
             value = get_value()
+
+            if value != 1 and not is_parallelism_supported:
+                print(f"[parallelism] not supported on this platform, will still works in the cloud environment, using 1 for now", file=sys.stderr)
+                value = 1
+
             output_file.write(str(value))
 
     def infer(
