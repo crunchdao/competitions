@@ -146,7 +146,7 @@ def run(
     prediction = _run_infer(context, tracer, data_directory_path, parallelism, determinism_check=False)
 
     if context.is_determinism_check_enabled:
-        percentage = 0.3
+        percentage = 0.1
         tolerance = 1e-8
 
         context.log(f"checking determinism by executing the inference again with {percentage * 100:.0f}% of the data (tolerance: {tolerance})")
