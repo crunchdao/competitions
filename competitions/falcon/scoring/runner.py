@@ -53,7 +53,6 @@ STATUS_NONE = 1
 STATUS_FAILED = 2
 
 PREDICTION_FILE_NAME = "prediction.parquet"
-PREDICTION_BATCH_SIZE = 100_000
 
 TRACKER_BASE_CLASS_NAME = "birdgame.trackers.trackerbase.TrackerBase"
 
@@ -229,55 +228,53 @@ class _Feeder:
             ("received_ns", pyarrow.int64()),
         ])
 
-        with pyarrow.parquet.ParquetWriter(self.prediction_file_path, schema, compression="zstd") as writer:
-            def flush():
-                if statuses:
-                    writer.write_table(pyarrow.table([statuses, densities, sent_times, received_times], schema=schema))
-                    for column in (statuses, densities, sent_times, received_times):
-                        column.clear()
+        for index in range(tick_count):
+            record = records[index * record_size:(index + 1) * record_size]
 
-            for index in range(tick_count):
-                record = records[index * record_size:(index + 1) * record_size]
+            sent = time.monotonic_ns()
+            connection.sendall(record)
 
-                sent = time.monotonic_ns()
-                connection.sendall(record)
+            header = _receive_exactly(connection, ANSWER_HEADER_STRUCT.size)
+            if header is None:
+                raise RuntimeError(f"the tracker stopped answering at tick {index:,} of {tick_count:,}")
 
-                header = _receive_exactly(connection, ANSWER_HEADER_STRUCT.size)
-                if header is None:
-                    raise RuntimeError(f"the tracker stopped answering at tick {index:,} of {tick_count:,}")
+            status, length = ANSWER_HEADER_STRUCT.unpack(header)
+            body = _receive_exactly(connection, length) if length else b""
+            received = time.monotonic_ns()
 
-                status, length = ANSWER_HEADER_STRUCT.unpack(header)
-                body = _receive_exactly(connection, length) if length else b""
-                received = time.monotonic_ns()
+            if body is None or status not in (STATUS_SUCCESS, STATUS_NONE, STATUS_FAILED):
+                raise RuntimeError(f"invalid answer at tick {index:,}")
 
-                if body is None or status not in (STATUS_SUCCESS, STATUS_NONE, STATUS_FAILED):
-                    raise RuntimeError(f"invalid answer at tick {index:,}")
+            statuses.append(status)
+            densities.append(body.decode() if status == STATUS_SUCCESS else None)
+            sent_times.append(sent)
+            received_times.append(received)
 
-                statuses.append(status)
-                densities.append(body.decode() if status == STATUS_SUCCESS else None)
-                sent_times.append(sent)
-                received_times.append(received)
+            duration = received - sent
+            slowest = max(slowest, duration)
+            if status == STATUS_FAILED:
+                failed_count += 1
+            elif status == STATUS_NONE:
+                none_count += 1
+            if duration > VERY_LATE_THRESHOLD_NANOSECONDS:
+                very_late_count += 1
+            if duration > LATE_THRESHOLD_NANOSECONDS:
+                late_count += 1
+                if late_count <= LATE_TICKS_PRINTED_ONE_BY_ONE or late_count % LATE_TICKS_PRINTED_EVERY == 0:
+                    self.log(f"replaying: slow tick {index:,}: {duration / 1e6:.1f} ms (over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms), {late_count:,} slow ticks so far")
 
-                duration = received - sent
-                slowest = max(slowest, duration)
-                if status == STATUS_FAILED:
-                    failed_count += 1
-                elif status == STATUS_NONE:
-                    none_count += 1
-                if duration > VERY_LATE_THRESHOLD_NANOSECONDS:
-                    very_late_count += 1
-                if duration > LATE_THRESHOLD_NANOSECONDS:
-                    late_count += 1
-                    if late_count <= LATE_TICKS_PRINTED_ONE_BY_ONE or late_count % LATE_TICKS_PRINTED_EVERY == 0:
-                        self.log(f"replaying: slow tick {index:,}: {duration / 1e6:.1f} ms (over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms), {late_count:,} slow ticks so far")
+            if (index + 1) % PROGRESS_EVERY == 0:
+                self.log(f"replaying: {index + 1:,}/{tick_count:,} ticks, {late_count:,} over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms, {failed_count:,} failed")
 
-                if (index + 1) % PROGRESS_EVERY == 0:
-                    self.log(f"replaying: {index + 1:,}/{tick_count:,} ticks, {late_count:,} over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms, {failed_count:,} failed")
-
-                if len(statuses) >= PREDICTION_BATCH_SIZE:
-                    flush()
-
-            flush()
+        # written once, at the end (the runner has the memory); the times only grow by a few dozen microseconds a
+        # tick: delta encoded, they take about a byte each
+        pyarrow.parquet.write_table(
+            pyarrow.table([statuses, densities, sent_times, received_times], schema=schema),
+            self.prediction_file_path,
+            compression="zstd",
+            use_dictionary=["status", "density"],
+            column_encoding={"sent_ns": "DELTA_BINARY_PACKED", "received_ns": "DELTA_BINARY_PACKED"},
+        )
 
         self.log(f"result: out of {tick_count:,} ticks:")
         self.log(f"result: - {late_count:,} ticks were over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms")
