@@ -3,6 +3,7 @@ import typing
 
 import crunch
 import crunch.unstructured
+import crunch.unstructured.utils
 import crunch.utils
 import numpy
 import pandas
@@ -16,13 +17,17 @@ class ParticipantVisibleError(Exception):
 
 tracer = crunch.utils.Tracer()
 
+PREDICTION_FILE_NAME = "prediction.parquet"
+
 
 def check(
-    prediction: pandas.DataFrame,
+    prediction_directory_path: str,
     data_directory_path: str,
     target_names: typing.List[str],
     phase_type: crunch.api.PhaseType
 ):
+    prediction = _load_prediction(prediction_directory_path)
+
     if "ALL" in target_names:
         target_names.remove("ALL")
 
@@ -91,11 +96,13 @@ def check(
 
 
 def score(
-    prediction: pandas.DataFrame,
+    prediction_directory_path: str,
     data_directory_path: str,
     phase_type: crunch.api.PhaseType,
     target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
 ):
+    prediction = _load_prediction(prediction_directory_path)
+
     group_type = 'validation' if phase_type == crunch.api.PhaseType.SUBMISSION else 'test'
 
     with tracer.log("Load region-cell mapping"):
@@ -182,6 +189,19 @@ def score(
     _compute_virtual(virtual_gene_spearman_metric, gene_spearman_metric_ids, scores)
 
     return scores
+
+
+def _load_prediction(
+    prediction_directory_path: str,
+) -> pandas.DataFrame:
+    prediction_file_path = os.path.join(prediction_directory_path, PREDICTION_FILE_NAME)
+
+    with tracer.log(f"Load prediction from file {PREDICTION_FILE_NAME}"):
+        if not os.path.exists(prediction_file_path):
+            raise ParticipantVisibleError(f"Missing prediction file: {PREDICTION_FILE_NAME}")
+
+        # the index holds the cell ids
+        return pandas.read_parquet(prediction_file_path)
 
 
 def _read_zarr(

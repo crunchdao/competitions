@@ -1,19 +1,23 @@
-import typing
+import glob
 import os
+import typing
 
 import crunch
-import crunch.custom
+import crunch.api
+import crunch.unstructured
+import crunch.utils
 import numpy
 import pandas
-import glob
 import scipy.stats
 
 tracer = crunch.utils.Tracer()
 
+PREDICTION_FILE_NAME = "prediction.parquet"
+
 
 def compare(
     targets: typing.List[crunch.api.Target],
-    predictions: typing.Dict[int, pandas.DataFrame],
+    prediction_directory_path_by_id: typing.Dict[int, str],
     combinations: typing.List[typing.Tuple[int, int]],
     data_directory_path: str,
 ):
@@ -41,7 +45,11 @@ def compare(
 
     predictions_by_sample: typing.Dict[int, typing.Dict[str, pandas.DataFrame]] = {}
 
-    for prediction_id, dataframe in tracer.loop(list(predictions.items()), lambda entry: f"Preparing Prediction #{entry[0]}"):
+    for prediction_id, prediction_directory_path in tracer.loop(list(prediction_directory_path_by_id.items()), lambda entry: f"Preparing Prediction #{entry[0]}"):
+        with tracer.log("Loading the prediction"):
+            # the index holds the cell ids
+            dataframe = pandas.read_parquet(os.path.join(prediction_directory_path, PREDICTION_FILE_NAME))
+
         prediction_by_sample = {}
 
         for sample_name, group in tracer.loop(dataframe.groupby("sample"), lambda entry: f"Grouped by {entry[0]}"):
@@ -67,9 +75,9 @@ def compare(
             prediction_by_sample[sample_name] = group["prediction"]
 
         predictions_by_sample[prediction_id] = prediction_by_sample
-        del predictions[prediction_id]
+        del dataframe
 
-    similarities: typing.List[crunch.custom.ComparedSimilarity] = []
+    similarities: typing.List[crunch.unstructured.ComparedSimilarity] = []
     for left_id, right_id in tracer.loop(combinations, lambda combination: f"Using Combination {combination[0]} <-> {combination[1]}"):
         left_prediction_by_sample = predictions_by_sample[left_id]
         right_prediction_by_sample = predictions_by_sample[right_id]
@@ -82,7 +90,7 @@ def compare(
         value = numpy.nanmean(values)
 
         print(f"similarity - left_id={left_id} right_id={right_id} value={value}")
-        similarities.append(crunch.custom.ComparedSimilarity(
+        similarities.append(crunch.unstructured.ComparedSimilarity(
             left_id,
             right_id,
             all_target.id,
@@ -95,7 +103,7 @@ def compare(
 def _find_target_by_name(
     targets: typing.List[crunch.api.Target],
     target_name: str,
-) -> crunch.api.Metric:
+) -> crunch.api.Target:
     for target in targets:
         if target.name == target_name:
             return target
@@ -104,12 +112,18 @@ def _find_target_by_name(
 
 
 def rank(
-    target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
-    projects: typing.List[crunch.custom.RankableProject],
-    rank_pass: crunch.custom.RankPass
+    target: crunch.api.Target,
+    metrics: typing.List[crunch.api.Metric],
+    projects: typing.List[crunch.unstructured.RankableProject],
+    rank_pass: crunch.unstructured.RankPass,
 ):
-    cell_spearman_metric = _find_metric_by_name(target_and_metrics, "ALL", "cell-spearman")
-    gene_spearman_metric = _find_metric_by_name(target_and_metrics, "ALL", "gene-spearman")
+    # called once per target (the former API passed every target, and only `ALL` was ranked): each target has both
+    # metrics, ranked the same way
+    if not projects:
+        return []
+
+    cell_spearman_metric = _find_metric_by_name(target, metrics, "cell-spearman")
+    gene_spearman_metric = _find_metric_by_name(target, metrics, "gene-spearman")
 
     cell_spearman_column_name = f"metric:{cell_spearman_metric.name}"
     gene_spearman_column_name = f"metric:{gene_spearman_metric.name}"
@@ -140,10 +154,10 @@ def rank(
 
     dataframe.index = range(1, len(dataframe.index) + 1)
 
-    if rank_pass == crunch.custom.RankPass.PRE_DUPLICATE:
+    if rank_pass == crunch.unstructured.RankPass.PRE_DUPLICATE:
         dataframe["rank_final"] = numpy.nan
 
-    elif rank_pass == crunch.custom.RankPass.FINAL:
+    elif rank_pass == crunch.unstructured.RankPass.FINAL:
         # mask = dataframe["rewardable"]
         # dataframe.loc[mask, "rank_rewardable"] = _rankdata(dataframe.loc[mask, "rank_all"])
 
@@ -154,7 +168,7 @@ def rank(
         raise ValueError(f"unknown rank pass: {rank_pass}")
 
     return [
-        crunch.custom.RankedProject(
+        crunch.unstructured.RankedProject(
             id=int(row["project_id"]),
             rank=index,
             reward_rank=None if numpy.isnan(row["rank_final"]) else row["rank_final"],
@@ -168,18 +182,12 @@ def _rankdata(array: typing.List[typing.Tuple[int, float]]):
 
 
 def _find_metric_by_name(
-    target_and_metrics: typing.List[typing.Tuple[crunch.api.Target, typing.List[crunch.api.Metric]]],
-    target_name: str,
+    target: crunch.api.Target,
+    metrics: typing.List[crunch.api.Metric],
     metric_name: str,
 ) -> crunch.api.Metric:
-    for target, metrics in target_and_metrics:
-        if target.name != target_name:
-            continue
-
-        for metric in metrics:
-            if metric.name != metric_name:
-                continue
-
+    for metric in metrics:
+        if metric.name == metric_name:
             return metric
 
-    raise ValueError(f"no metric found with name=`{metric_name}` from target with name=`{target_name}`")
+    raise ValueError(f"no metric found with name=`{metric_name}` from target with name=`{target.name}`")
