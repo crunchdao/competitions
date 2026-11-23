@@ -9,5 +9,5 @@
     "language": "PYTHON",
     "usage": "SUBMISSION",
     "notebook": true,
-    "entrypoint": "https://github.com/microprediction/birdgame/blob/main/birdgame/examples/quickstarters/wealth_distribution.ipynb"
+    "entrypoint": "wealth-distribution.ipynb"
 }
