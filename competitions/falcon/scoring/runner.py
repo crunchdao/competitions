@@ -79,6 +79,20 @@ CONNECTION_TIMEOUT_SECONDS = 600
 SOCKET_PARENT_PATH_LIMIT = 70
 
 
+def load_data(
+    data_directory_path: str,
+):
+    """
+    The local history as a DataFrame, one row per tick in feed order: `time` (seconds since the game started, it goes
+    back when the game restarts), `falcon_location`, `falcon_wingspan`, `dove_location`, `falcon_id`.
+    """
+
+    import pandas
+
+    ticks = numpy.fromfile(os.path.join(data_directory_path, HISTORY_FILE_NAME), dtype=TICK_DTYPE)
+    return pandas.DataFrame(ticks)
+
+
 def run(
     context: "RunnerContext",
     data_directory_path: str,
@@ -205,7 +219,7 @@ class _Feeder:
         tick_count = len(self.ticks)
 
         statuses, densities, sent_times, received_times = [], [], [], []
-        late_count = very_late_count = failed_count = 0
+        late_count = very_late_count = failed_count = none_count = 0
         slowest = 0
 
         schema = pyarrow.schema([
@@ -248,6 +262,8 @@ class _Feeder:
                 slowest = max(slowest, duration)
                 if status == STATUS_FAILED:
                     failed_count += 1
+                elif status == STATUS_NONE:
+                    none_count += 1
                 if duration > VERY_LATE_THRESHOLD_NANOSECONDS:
                     very_late_count += 1
                 if duration > LATE_THRESHOLD_NANOSECONDS:
@@ -263,10 +279,12 @@ class _Feeder:
 
             flush()
 
-        self.log(
-            f"{late_count:,} ticks were over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms, {very_late_count:,} ticks were over {VERY_LATE_THRESHOLD_NANOSECONDS / 1e9:.0f} s "
-            f"(slowest {slowest / 1e6:.1f} ms), {failed_count:,} failed, out of {tick_count:,}"
-        )
+        self.log(f"out of {tick_count:,} ticks:")
+        self.log(f"- {late_count:,} ticks were over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms")
+        self.log(f"- {very_late_count:,} ticks were over {VERY_LATE_THRESHOLD_NANOSECONDS / 1e9:.0f} s")
+        self.log(f"- the slowest took {slowest / 1e6:.1f} ms")
+        self.log(f"- {none_count:,} ticks had no density (None)")
+        self.log(f"- {failed_count:,} ticks failed")
 
 
 def _listen(directory_path: str) -> tuple[socket.socket, str]:
