@@ -103,7 +103,7 @@ def run(
     else:
         ticks = numpy.fromfile(os.path.join(data_directory_path, TICKS_FILE_NAME), dtype=TICK_DTYPE)
 
-    context.log(f"replaying {len(ticks):,} ticks")
+    context.log(f"replaying: {len(ticks):,} ticks")
 
     # outside the prediction directory until the end: the sandbox can write there
     work_directory_path = tempfile.mkdtemp(prefix="falcon-")
@@ -269,22 +269,22 @@ class _Feeder:
                 if duration > LATE_THRESHOLD_NANOSECONDS:
                     late_count += 1
                     if late_count <= LATE_TICKS_PRINTED_ONE_BY_ONE or late_count % LATE_TICKS_PRINTED_EVERY == 0:
-                        self.log(f"slow tick {index:,}: {duration / 1e6:.1f} ms (over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms), {late_count:,} slow ticks so far")
+                        self.log(f"replaying: slow tick {index:,}: {duration / 1e6:.1f} ms (over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms), {late_count:,} slow ticks so far")
 
                 if (index + 1) % PROGRESS_EVERY == 0:
-                    self.log(f"{index + 1:,}/{tick_count:,} ticks, {late_count:,} over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms, {failed_count:,} failed")
+                    self.log(f"replaying: {index + 1:,}/{tick_count:,} ticks, {late_count:,} over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms, {failed_count:,} failed")
 
                 if len(statuses) >= PREDICTION_BATCH_SIZE:
                     flush()
 
             flush()
 
-        self.log(f"out of {tick_count:,} ticks:")
-        self.log(f"- {late_count:,} ticks were over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms")
-        self.log(f"- {very_late_count:,} ticks were over {VERY_LATE_THRESHOLD_NANOSECONDS / 1e9:.0f} s")
-        self.log(f"- the slowest took {slowest / 1e6:.1f} ms")
-        self.log(f"- {none_count:,} ticks had no density (None)")
-        self.log(f"- {failed_count:,} ticks failed")
+        self.log(f"result: out of {tick_count:,} ticks:")
+        self.log(f"result: - {late_count:,} ticks were over {LATE_THRESHOLD_NANOSECONDS / 1e6:.0f} ms")
+        self.log(f"result: - {very_late_count:,} ticks were over {VERY_LATE_THRESHOLD_NANOSECONDS / 1e9:.0f} s")
+        self.log(f"result: - the slowest took {slowest / 1e6:.1f} ms")
+        self.log(f"result: - {none_count:,} ticks had no density (None)")
+        self.log(f"result: - {failed_count:,} ticks failed")
 
 
 def _listen(directory_path: str) -> tuple[socket.socket, str]:
