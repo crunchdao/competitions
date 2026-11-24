@@ -29,10 +29,10 @@ import json
 import math
 import os
 from importlib.metadata import version
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 import numpy
-import pandas
+import pyarrow.parquet
 from crunch.api import Metric, Target
 from crunch.unstructured import ScoredMetric
 from crunch.utils import Tracer
@@ -40,6 +40,7 @@ from crunch.utils import Tracer
 TICKS_FILE_NAME = "ticks.bin"
 POT_FILE_NAME = "pot.bin"
 PREDICTION_FILE_NAME = "prediction.parquet"
+DENSITY_BATCH_SIZE = 100_000  # the runner writes row groups of this size: about 160 MB of JSON for the heaviest ones
 
 TICK_DTYPE = numpy.dtype([
     ("time", "<f8"),
@@ -91,15 +92,17 @@ def check(
     prediction_directory_path: str,
     data_directory_path: str,
 ):
-    prediction = _load_prediction(prediction_directory_path)
+    prediction_file = _open_prediction(prediction_directory_path)
     ticks = _load_ticks(data_directory_path)
 
     with tracer.log("Check the number of answers"):
-        if len(prediction) != len(ticks):
-            raise ParticipantVisibleError(f"Expected {len(ticks):,} answers, got {len(prediction):,}")
+        answer_count = prediction_file.metadata.num_rows
+        if answer_count != len(ticks):
+            raise ParticipantVisibleError(f"Expected {len(ticks):,} answers, got {answer_count:,}")
 
     with tracer.log("Check the statuses"):
-        if not prediction["status"].isin([STATUS_SUCCESS, STATUS_NONE, STATUS_FAILED]).all():
+        statuses = _read_columns(prediction_file, ["status"])["status"]
+        if not numpy.isin(statuses, [STATUS_SUCCESS, STATUS_NONE, STATUS_FAILED]).all():
             raise ParticipantVisibleError("Unknown answer status")
 
 
@@ -113,8 +116,12 @@ def score(
     _, metrics = target_and_metrics[0]
     metrics_by_name = {metric.name: metric for metric in metrics}
 
-    prediction = _load_prediction(prediction_directory_path)
+    prediction_file = _open_prediction(prediction_directory_path)
     ticks = _load_ticks(data_directory_path)
+    if prediction_file.metadata.num_rows != len(ticks):
+        raise ValueError(f"the prediction has {prediction_file.metadata.num_rows:,} answers, the feed {len(ticks):,} ticks")
+
+    prediction = _read_columns(prediction_file, ["status", "sent_ns", "received_ns"])
 
     with tracer.log("Resolve each tick"):
         resolving_index = resolve(ticks["time"])
@@ -122,7 +129,7 @@ def score(
             raise ValueError("no tick to score")
 
     with tracer.log("Compute the likelihoods"):
-        likelihoods = likelihoods_of(ticks, resolving_index, prediction)
+        likelihoods = likelihoods_of(ticks, resolving_index, prediction["status"], _iterate_densities(prediction_file))
 
     scores: Dict[int, ScoredMetric] = {}
 
@@ -140,7 +147,7 @@ def score(
         if len(pot) != len(ticks):
             raise ValueError(f"the pot has {len(pot):,} ticks, the feed {len(ticks):,}")
 
-        late = (prediction["received_ns"].to_numpy() - prediction["sent_ns"].to_numpy()) > LATE_THRESHOLD_NANOSECONDS
+        late = (prediction["received_ns"] - prediction["sent_ns"]) > LATE_THRESHOLD_NANOSECONDS
         participating = likelihoods.copy()
         participating[late] = numpy.nan
 
@@ -178,17 +185,28 @@ def resolve(times: numpy.ndarray) -> numpy.ndarray:
 def likelihoods_of(
     ticks: numpy.ndarray,
     resolving_index: numpy.ndarray,
-    prediction: pandas.DataFrame,
+    statuses: numpy.ndarray,
+    density_batches: Iterable[List[Optional[str]]],
 ) -> numpy.ndarray:
-    """The likelihood of each resolved tick's density, NaN when there is none (missing, failed, or not resolved)."""
+    """
+    The likelihood of each resolved tick's density, NaN when there is none (missing, failed, or not resolved).
+    `density_batches` gives the densities in order, a batch at a time: the whole column does not fit in memory.
+    """
 
-    statuses = prediction["status"].to_numpy()
-    densities = prediction["density"].to_numpy()
     dove_locations = ticks["dove_location"]
+    scored = (resolving_index >= 0) & (statuses == STATUS_SUCCESS)
 
     likelihoods = numpy.full(len(ticks), numpy.nan)
-    for index in numpy.flatnonzero((resolving_index >= 0) & (statuses == STATUS_SUCCESS)):
-        likelihoods[index] = likelihood_of(densities[index], dove_locations[resolving_index[index]])
+    offset = 0
+    for densities in density_batches:
+        end = offset + len(densities)
+        for index in numpy.flatnonzero(scored[offset:end]):
+            likelihoods[offset + index] = likelihood_of(densities[index], dove_locations[resolving_index[offset + index]])
+
+        offset = end
+
+    if offset != len(ticks):
+        raise ValueError(f"read {offset:,} densities, expected {len(ticks):,}")
 
     return likelihoods
 
@@ -297,16 +315,32 @@ def _ensure_density_normalization():
         raise RuntimeError(f"densitypdf >= 0.1.4 is required, {version('densitypdf')} is installed")
 
 
-def _load_prediction(
+def _open_prediction(
     prediction_directory_path: str,
-) -> pandas.DataFrame:
+) -> pyarrow.parquet.ParquetFile:
     path = os.path.join(prediction_directory_path, PREDICTION_FILE_NAME)
+    if not os.path.exists(path):
+        raise ParticipantVisibleError(f"No {PREDICTION_FILE_NAME} found")
 
-    with tracer.log("Load the prediction"):
-        if not os.path.exists(path):
-            raise ParticipantVisibleError(f"No {PREDICTION_FILE_NAME} found")
+    return pyarrow.parquet.ParquetFile(path)
 
-        return pandas.read_parquet(path, columns=["status", "density", "sent_ns", "received_ns"])
+
+def _read_columns(
+    prediction_file: pyarrow.parquet.ParquetFile,
+    column_names: List[str],
+) -> Dict[str, numpy.ndarray]:
+    """Small columns only (numbers): never the densities, which are read in batches."""
+
+    with tracer.log(f"Load the prediction's {', '.join(column_names)}"):
+        table = prediction_file.read(columns=column_names)
+        return {name: table.column(name).to_numpy() for name in column_names}
+
+
+def _iterate_densities(
+    prediction_file: pyarrow.parquet.ParquetFile,
+) -> Iterator[List[Optional[str]]]:
+    for batch in prediction_file.iter_batches(batch_size=DENSITY_BATCH_SIZE, columns=["density"]):
+        yield batch.column(0).to_pylist()
 
 
 def _load_ticks(
